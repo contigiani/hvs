@@ -47,6 +47,7 @@ class Rossi2017(EjectionModel):
             Allowed range of HVS initial velocities
         m_range : Quantity
             Allowed range of HVS masses
+            
         Methods
         -------
         g(self, r) :
@@ -79,7 +80,7 @@ class Rossi2017(EjectionModel):
             self._name = 'Rossi 2017'
     
     
-        self.a, self.b, self.c, self.d = vm_params
+        self.a, self.b, self.c, self.d, self.e = vm_params
         self.centralr, self.sigmar, self.Nsigma = r_params
     
     
@@ -118,36 +119,34 @@ class Rossi2017(EjectionModel):
         '''
         
         size = r.size
-        dr = np.gradient(r)
+        r = ((r - self.centralr)/self.sigmar).to(1).value # normalized r
+        
         
         if((m.shape != v.shape) or (v.shape != r.shape)):
             raise ValueError('The input Quantities must have the same shape.')
         
+        #Boundaries of the space:
+        idx = (v > self.v_range[0]) & (v < self.v_range[1]) & (m > self.m_range[0]) \
+                & (m < self.m_range[1]) & (r < self.Nsigma) & (r>=0)
+        
+        result = np.full(r.shape, np.nan)
+        result[~idx] = 0
         
         # Mass-velocity component
-        vcomp = np.full(v.shape, np.nan)
-        v0 = np.power((m/u.Msun).to('1').value, self.b)*self.a
+        v0 = np.full(r.shape, -np.inf)*u.km/u.s
+        v0[idx] = np.power((m[idx]/u.Msun).to('1').value, self.b)*self.a
         
-        idx1 = v > v0
-        idx2 = (v > self.v_range[0]) & (v < self.v_range[1])
+        idx1 = idx & (v > v0)
+        idx2 = idx & (v < v0)
         
-        idxa = idx1 & idx2
-        idxb = (~idx1) & (idx2)
-        idxc = ~idx2
+        result[idx1] = np.power(m[idx1], self.c) * np.power(v[idx1]/v0[idx1], self.d) 
+        result[idx2] = np.power(m[idx2], self.c) * np.power(v[idx2]/v0[idx2], self.e)
         
-        vcomp[idxa] = np.power(m[idxa], self.c) * np.power(v[idxa]/v0, self.d) 
-        vcomp[idxb] = np.power(m[idxb], self.c) * np.power(v[idxb]/v0, self.e) 
-        vcomp[idxc] = 0
-        
-
 
         # Radial component
-        rcomp = np.full(r.shape, np.nan)
-        r = ((r - self.centralr)/self.sigmar).to(1).value
-        idx = r < self.Nsigma
-        rcomp[idx] = np.exp(-np.power(r[idx], 2.)/2.)
-
-        return rcomp*vcomp
+        result[idx] *= np.exp(-np.power(r[idx], 2.)/2.)
+        
+        return result
     
     
     def _lnprobmv(self, data):
@@ -162,10 +161,18 @@ class Rossi2017(EjectionModel):
                     HVS velocity at ejection point
         '''
         
-        return np.log(R(data[0]*u.Msun, data[1]*u.km/u.s, self.centralr*np.ones(data[0].shape)))
+        result = self.R(np.atleast_1d(data[0])*u.Msun, \
+                             np.atleast_1d(data[1])*u.km/u.s, \
+                             self.centralr*np.atleast_1d(np.ones_like(data[0])))
+        
+        result[result>0] = np.log(result[result>0])
+        result[result==0] = -np.inf
+        
+        
+        return result
         
 
-    def _lnprob_q_a_mp(self, data)    
+    def _lnprob_q_a_mp(self, data):   
         '''
         
         '''
@@ -177,7 +184,8 @@ class Rossi2017(EjectionModel):
         idxboundary = (q >= 0.1/mp) & (q <= 1) & (mp >= 0.1) & (mp <= 100) & (a>=2.5*mp) & (a<2000)
         
         result[~idxboundary] = -np.inf
-        result[idxboundary] = self._lnprobq(q[idxboundary]) + self.lnproba(a[idxboundary]) + self._lnprob(mp[idxboundary])
+        result[idxboundary] = self._lnprobq(q[idxboundary]) + self.lnproba(a[idxboundary]) + \
+                                self._lnprob(mp[idxboundary])
     
         return result
     
@@ -245,27 +253,29 @@ class Rossi2017(EjectionModel):
         from utils.mainsequence import t_MS
         from math import ceil
         from astropy import constants as const
+        import emcee
+        PI = np.pi
         
         nwalkers = 100
-        n = ceil(n/nwalkers)*nwalkers
+        n = int(ceil(n/nwalkers)*nwalkers)
         
         # Mass and velocity magnitude
         if(pl):
             ndim = 2
-            p0 = [np.random.rand(2)*numpy.array([10, 100])+numpy.array([3, 1000]) for i in xrange(nwalkers)]
+            p0 = [np.random.rand(2)*np.array([1, 100])+np.array([3, 1000]) for i in xrange(nwalkers)]
             
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self._lnprobmv)
         
-            if(self.verbose):
+            if(verbose):
                 print('burn in...')
-            pos, prob, state = sampler.run_mcmc(p0, 1000)
-            if(self.verbose):
+            pos, prob, state = sampler.run_mcmc(p0, 100)
+            if(verbose):
                 print('burn in done')
 
             sampler.reset()
-            sampler.run_mcmc(pos, int(n/nwalkers), rstate=state)
+            sampler.run_mcmc(pos, int(n/nwalkers), rstate0=state)
             
-            if(self.verbose):
+            if(verbose):
                 try:
                     print("Mean acceptance fraction:")
                     print(np.mean(sampler.acceptance_fraction))
@@ -280,19 +290,19 @@ class Rossi2017(EjectionModel):
             # q, a, mp
             ndim = 3
             nwalkers = 100
-            p0 = [np.random.rand(3)*numpy.array([0.1,1.,1.])+numpy.array([0.5, 10, 3]) for i in xrange(nwalkers)]
+            p0 = [np.random.rand(3)*np.array([0.1,1.,1.])+np.array([0.5, 10, 3]) for i in xrange(nwalkers)]
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self._lnprob_q_a_mp)
             
-            if(self.verbose):
+            if(verbose):
                 print('burn in...')
-            pos, prob, state = sampler.run_mcmc(p0, 1000)
-            if(self.verbose):
+            pos, prob, state = sampler.run_mcmc(p0, 100)
+            if(verbose):
                 print('burn in done')
 
             sampler.reset()
-            sampler.run_mcmc(pos, int(n/nwalkers), rstate=state)
+            sampler.run_mcmc(pos, int(n/nwalkers), rstate0=state)
             
-            if(self.verbose):
+            if(verbose):
                 try:
                     print("Mean acceptance fraction:")
                     print(np.mean(sampler.acceptance_fraction))
@@ -306,7 +316,7 @@ class Rossi2017(EjectionModel):
             ur = np.random.uniform(0,1,n)
             idx = ur>=0.5
             
-            M_HVS, M_C = numpy.zeros(n)*u.Msun, numpy.zeros(n)*u.Msun
+            M_HVS, M_C = np.zeros(n)*u.Msun, np.zeros(n)*u.Msun
             M_HVS[idx] = Mp[idx]
             M_HVS[~idx] = Mp[~idx]*q[~idx]
             M_C[idx] = Mp[idx]*q[idx]
@@ -319,8 +329,6 @@ class Rossi2017(EjectionModel):
             n = idx.sum()
             
             m, v = M_HVS[idx], v[idx]
-
-
         
         # Distance from GC normally distributed
         r0 = np.abs(np.random.normal(0, 1, n))*self.sigmar+self.centralr

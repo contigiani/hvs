@@ -43,7 +43,10 @@ class HVSsample:
                 Magnitudes in the GRVS band
             self.tage, self.tflight : Quantity
                 Age and flight time of the stars
-                
+            
+            solarmotion : Quantity
+                Solar motion  
+            
         Methods
         -------
             __init__():
@@ -62,7 +65,7 @@ class HVSsample:
     '''
 
     solarmotion = [-14*u.km/u.s, 12.24*u.km/u.s, 7.25*u.km/u.s] 
-
+    dt = 0.01*u.Myr
 
     def __init__(self, inputdata=None, name=None, **kwargs):
         '''
@@ -79,15 +82,16 @@ class HVSsample:
             raise ValueError('Initialize the class by either providing an \
                                 ejection model or the path of an HVS catalog.')
         
+        if(name is None):
+            self.name = 'HVS catalog '+str(time.time())
+        else:
+            self.name = name
         
         if isinstance(inputdata, EjectionModel):
             self._eject(inputdata, **kwargs)
         
         if isinstance(inputdata, basestring):
             self._load(inputdata)
- 
-        if(name is None):
-            self.name = 'HVS catalog '+str(time.time()) 
     
     
     def _eject(self, ejmodel, **kwargs):
@@ -192,9 +196,10 @@ class HVSsample:
         '''
         from astropy.table import Table
         
-        meta_var = {'name' : self.name, 'ejmodel' : self.ejmodel_name, 'cattype' : self.cattype, 'dt' : self.dt}
+        meta_var = {'name' : self.name, 'ejmodel' : self.ejmodel_name, 'cattype' : self.cattype, \
+                    'dt' : self.dt.to('Myr').value}
         
-        if(cattype == 0):
+        if(self.cattype == 0):
             # Ejection catalog
             datalist = [self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0, \
                         self.m, self.tage, self.tflight]
@@ -202,7 +207,7 @@ class HVSsample:
             
             
             
-        if(cattype == 1):
+        if(self.cattype == 1):
             # Propagated catalog
             datalist = [self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0, \
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
@@ -215,7 +220,7 @@ class HVSsample:
             #TODO
             return True
 
-        data_table = Table(datalist, namelist, meta=meta_var)
+        data_table = Table(data=datalist, names=namelist, meta=meta_var)
         data_table.write(path, overwrite=True)
     
     
@@ -242,7 +247,7 @@ class HVSsample:
             self.ejmodel_name = data_table.meta['ejmodel']
 
         if('dt' in data_table.meta):
-            self.dt = data_table.meta['ejmodel']
+            self.dt = data_table.meta['dt']*u.Myr
         
         if('cattype' not in data_table.meta):
             raise ValueError('Loaded fits table must contain the cattype metavariable!')
