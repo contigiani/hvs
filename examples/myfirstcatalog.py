@@ -1,3 +1,6 @@
+'''
+    Simple ejection catalog
+'''
 import numpy as np
 from hvs import HVSsample, Rossi2017
 
@@ -10,8 +13,7 @@ print ejectionmodel._name
 print ejectionmodel.v_range
 print ejectionmodel.m_range
 
-# Create a sample of 1000 HVS by sampling the ejection distribution rate
-np.random.seed(0)
+# Create a sample of 1000 HVS by sampling the fit to the ejection distribution rate
 mysample = HVSsample(ejectionmodel, name='My Sample', n=1e5, pl=True, verbose=True)
 
 # Save it for later!

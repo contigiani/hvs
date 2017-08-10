@@ -236,11 +236,12 @@ class HVSsample:
         data_table = Table.read(path)
         
         #METADATA    
+        data_table.meta =  {k.lower(): v for k, v in data_table.meta.items()}
         self.name = 'Unkown'
         self.ejmodel_name = 'Unknown'
         self.dt = 0*u.Myr
         
-        if('name' in data_table.meta):
+        if ('name' in data_table.meta):
             self.name = data_table.meta['name']
         
         if('ejmodel' in data_table.meta):
@@ -248,6 +249,7 @@ class HVSsample:
 
         if('dt' in data_table.meta):
             self.dt = data_table.meta['dt']*u.Myr
+        
         
         if('cattype' not in data_table.meta):
             raise ValueError('Loaded fits table must contain the cattype metavariable!')
@@ -257,10 +259,10 @@ class HVSsample:
         
         #DATA 
         i=0
-        for colname in data.colnames:
+        for colname in data_table.colnames:
             try:
                 i = namelist.index(colname)
-                setattr(self, colname, data[i].quantity)
+                setattr(self, colname, data_table[colname].quantity)
                 i+=1
             except ValueError:
                 print('Column not recognized: ' + str(colname))

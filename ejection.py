@@ -142,15 +142,12 @@ class Rossi2017(EjectionModel):
         v0 = np.full(r.shape, -np.inf)*u.km/u.s
         v0[idx] = np.power((m[idx]/u.Msun).to('1').value, self.b)*self.a
         
-        idx1 = idx & (v > v0)
+        idx1 = idx & (v >= v0)
         idx2 = idx & (v < v0)
         
-        result[idx1] = np.power(m[idx1], self.c) * np.power(v[idx1]/v0[idx1], self.d) 
-        result[idx2] = np.power(m[idx2], self.c) * np.power(v[idx2]/v0[idx2], self.e)
+        result[idx1] = np.power(m[idx1], self.c) * np.power(v[idx1]/v0[idx1], self.d) * np.exp(-np.power(r[idx1], 2.)/2.)
+        result[idx2] = np.power(m[idx2], self.c) * np.power(v[idx2]/v0[idx2], self.e) * np.exp(-np.power(r[idx2], 2.)/2.)
         
-
-        # Radial component
-        result[idx] *= np.exp(-np.power(r[idx], 2.)/2.)
         
         return result
     
@@ -181,15 +178,15 @@ class Rossi2017(EjectionModel):
         
         '''
         
-        q, a, mp = data[0]. data[1]. data[2]
+        q, a, mp = np.atleast_1d(data[0]), np.atleast_1d(data[1]), np.atleast_1d(data[2])
         result = np.full(q.shape, np.nan)
         
         #boundary
         idxboundary = (q >= 0.1/mp) & (q <= 1) & (mp >= 0.1) & (mp <= 100) & (a>=2.5*mp) & (a<2000)
         
         result[~idxboundary] = -np.inf
-        result[idxboundary] = self._lnprobq(q[idxboundary]) + self.lnproba(a[idxboundary]) + \
-                                self._lnprob(mp[idxboundary])
+        result[idxboundary] = self._lnprobq(q[idxboundary]) + self._lnproba(a[idxboundary]) + \
+                                self._lnprobmp(mp[idxboundary])
     
         return result
     
@@ -210,7 +207,7 @@ class Rossi2017(EjectionModel):
         # Auxilary function for _lnprob_q_a_mp - IMF for primary mass
         
         result = np.full(mp.shape, np.nan)
-        idx = m > 0.5 #Cutoff of the Kroupa IMF
+        idx = mp > 0.5 #Cutoff of the Kroupa IMF
         
         result[idx] = -2.3*np.log(mp) + np.log(0.5)
         result[~idx] = -1.3*np.log(mp)
@@ -260,7 +257,7 @@ class Rossi2017(EjectionModel):
         import emcee
         PI = np.pi
         
-        nwalkers = 100
+        nwalkers = 10
         n = int(ceil(n/nwalkers)*nwalkers)
         
         # Mass and velocity magnitude
@@ -272,7 +269,7 @@ class Rossi2017(EjectionModel):
         
             if(verbose):
                 print('burn in...')
-            pos, prob, state = sampler.run_mcmc(p0, 100)
+            pos, prob, state = sampler.run_mcmc(p0, 1000)
             if(verbose):
                 print('burn in done')
 
@@ -293,13 +290,13 @@ class Rossi2017(EjectionModel):
         else:
             # q, a, mp
             ndim = 3
-            nwalkers = 100
+            nwalkers = 10
             p0 = [np.random.rand(3)*np.array([0.1,1.,1.])+np.array([0.5, 10, 3]) for i in xrange(nwalkers)]
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self._lnprob_q_a_mp)
             
             if(verbose):
                 print('burn in...')
-            pos, prob, state = sampler.run_mcmc(p0, 100)
+            pos, prob, state = sampler.run_mcmc(p0, 1000)
             if(verbose):
                 print('burn in done')
 
@@ -321,12 +318,12 @@ class Rossi2017(EjectionModel):
             idx = ur>=0.5
             
             M_HVS, M_C = np.zeros(n)*u.Msun, np.zeros(n)*u.Msun
-            M_HVS[idx] = Mp[idx]
-            M_HVS[~idx] = Mp[~idx]*q[~idx]
-            M_C[idx] = Mp[idx]*q[idx]
-            M_C[~idx] = Mp[~idx]
+            M_HVS[idx] = mp[idx]
+            M_HVS[~idx] = mp[~idx]*q[~idx]
+            M_C[idx] = mp[idx]*q[idx]
+            M_C[~idx] = mp[~idx]
             
-            v = (np.sqrt( 2.*const.G.cgs*M_C / a )  * ( self.M_BH/(M_C+M_HVS) )**(1./6.))
+            v = (np.sqrt( 2.*const.G.cgs*M_C / a )  * ( self.M_BH/(M_C+M_HVS) )**(1./6.)).to('km/s')
             
             
             idx = (M_HVS > self.m_range[0]) & (M_HVS < self.m_range[1]) & (v > self.v_range[0]) & (v < self.v_range[1])
