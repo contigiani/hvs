@@ -47,7 +47,11 @@ class Rossi2017(EjectionModel):
             Allowed range of HVS initial velocities
         m_range : Quantity
             Allowed range of HVS masses
-            
+        T_MW : Quantity
+            Milky Way lifetime
+        M_BH : Quantity
+            Mass of the BH at the GC
+        
         Methods
         -------
         g(self, r) :
@@ -58,7 +62,7 @@ class Rossi2017(EjectionModel):
     v_range = [450, 5000]*u.km/u.s
     m_range = [0.1, 10]*u.Msun
     T_MW = 13.8*u.Gyr # MW maximum lifetime from Planck2015
-    
+    M_BH = 4e6*u.Msun #
     
     def __init__(self, name_modifier = None, vm_params = [1530*u.km/u.s, -0.65, -1.7, -6.3, -1], \
                     r_params = [3*u.pc, 100*u.pc, 4]):
@@ -118,6 +122,8 @@ class Rossi2017(EjectionModel):
                     Distance of the ejection point from the GC
         '''
         
+        m, v, r = u.Quantity(m, ndmin=1), u.Quantity(v, ndmin=1), u.Quantity(r, ndmin=1)
+        
         size = r.size
         r = ((r - self.centralr)/self.sigmar).to(1).value # normalized r
         
@@ -161,9 +167,7 @@ class Rossi2017(EjectionModel):
                     HVS velocity at ejection point
         '''
         
-        result = self.R(np.atleast_1d(data[0])*u.Msun, \
-                             np.atleast_1d(data[1])*u.km/u.s, \
-                             self.centralr*np.atleast_1d(np.ones_like(data[0])))
+        result = self.R(data[0]*u.Msun, data[1]*u.km/u.s, self.centralr*np.ones_like(data[0]))
         
         result[result>0] = np.log(result[result>0])
         result[result==0] = -np.inf
@@ -322,7 +326,7 @@ class Rossi2017(EjectionModel):
             M_C[idx] = Mp[idx]*q[idx]
             M_C[~idx] = Mp[~idx]
             
-            v = (np.sqrt( 2.*const.G.cgs*M_C / a )  * ( MBH/(M_C+M_HVS) )**(1./6.))
+            v = (np.sqrt( 2.*const.G.cgs*M_C / a )  * ( self.M_BH/(M_C+M_HVS) )**(1./6.))
             
             
             idx = (M_HVS > self.m_range[0]) & (M_HVS < self.m_range[1]) & (v > self.v_range[0]) & (v < self.v_range[1])

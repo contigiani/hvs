@@ -12,7 +12,7 @@ print ejectionmodel.m_range
 
 # Create a sample of 1000 HVS by sampling the ejection distribution rate
 np.random.seed(0)
-mysample = HVSsample(ejectionmodel, name='My Sample', n=1000, pl=True, verbose=True)
+mysample = HVSsample(ejectionmodel, name='My Sample', n=1e5, pl=True, verbose=True)
 
 # Save it for later!
 mysample.save('myfirstcatalog.fits')
