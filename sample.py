@@ -64,7 +64,9 @@ class HVSsample:
                 Saves the sample in a FITS file
     '''
 
-    solarmotion = [-14*u.km/u.s, 12.24*u.km/u.s, 7.25*u.km/u.s] # Galpy notation requires U to have a - sign
+    # U, V, W in km/s in galactocentric coordinates. Galpy notation requires U to have a minus sign. 
+    solarmotion = [-14., 12.24, 7.25]  
+    dt = 0.01*u.Myr
 
     def __init__(self, inputdata=None, name=None, **kwargs):
         '''
@@ -133,7 +135,7 @@ class HVSsample:
         
         # Integration time step 
         self.dt = dt
-        nsteps = numpy.ceil((self.tflight/self.dt).to('1').value)
+        nsteps = np.ceil((self.tflight/self.dt).to('1').value)
         nsteps[nsteps<100] = 100
         
         # Initialize position in cylindrical coords
@@ -148,13 +150,13 @@ class HVSsample:
 
         # Initialize empty arrays to save orbit data and integration steps
         self.pmll, self.pmbb, self.ll, self.bb, self.vlos, self.dist, self.energy_var = \
-                                                                            (numpy.zeros(self.size) for i in xrange(7))
+                                                                            (np.zeros(self.size) for i in xrange(7))
         self.orbits = [None] * self.size
     
     
         #Integration loop for the self.size orbits
         for i in xrange(self.size):
-            #print(i)
+            print(i)
             
             ts = np.linspace(0, 1, nsteps[i])*self.tflight[i]
             
@@ -172,9 +174,9 @@ class HVSsample:
 
             # Energy check
             if(check):
-                energy_array = self.orbits[i].energy(ts)
-                idxs_energy = np.absolute(energy_array/energy_array[0] - 1) >  energy_threshold
-                self.energy_var[i] = idx_energy.sum()/nsteps[i] # percentage of outliars
+                energy_array = self.orbits[i].E(ts)
+                idx_energy = np.absolute(energy_array/energy_array[0] - 1) >  threshold
+                self.energy_var[i] = float(idx_energy.sum())/nsteps[i] # percentage of outliars
 
         # Radial velocity and distance + distance modulus
         self.vlos, self.dist = self.vlos * u.km/u.s, self.dist * u.kpc
