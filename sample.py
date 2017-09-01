@@ -64,8 +64,7 @@ class HVSsample:
                 Saves the sample in a FITS file
     '''
 
-    solarmotion = [-14*u.km/u.s, 12.24*u.km/u.s, 7.25*u.km/u.s] 
-    dt = 0.01*u.Myr
+    solarmotion = [-14*u.km/u.s, 12.24*u.km/u.s, 7.25*u.km/u.s] # Galpy notation requires U to have a - sign
 
     def __init__(self, inputdata=None, name=None, **kwargs):
         '''
@@ -106,7 +105,7 @@ class HVSsample:
             self.m, self.tage, self.tflight, self.size = ejmodel.sampler(**kwargs)
         
     
-    def propagate(self, potential, dt=0.01*u.Myr):
+    def propagate(self, potential, dt=0.01*u.Myr, check=False, threshold=0.01):
         '''
             Propagates the sample in the Galaxy, changes cattype from 0 to 1.
             
@@ -115,7 +114,16 @@ class HVSsample:
                 potential : galpy potential instance
                     Potential instance of the galpy library used to integrate the orbits
                 dt : Quantity
-                    Integration timestep
+                    Integration timestep. Defaults to 0.01 Myr
+                check : bool
+                    Flag to check the energy of the orbits remains constant over time, also saves a .e_data
+                    file in the current directory containing the percentage of integration steps that are defined as
+                    energy outliars. Defaults to False
+                threshold : float
+                    Maximum relative energy difference between the initial energy and the energy at any point needed
+                    to consider an integration step an energy outliar. Defaults to 0.01, meaning that any excess or 
+                    deficit of 1% (or more) of the initial energy is enough to be registered as ourliar
+                
         '''
         from galpy.orbit import Orbit
         from galpy.util.bovy_coords import pmllpmbb_to_pmrapmdec, lb_to_radec, vrpmllpmbb_to_vxvyvz, lbd_to_XYZ
@@ -139,7 +147,8 @@ class HVSsample:
         vz = self.v0 * np.cos(self.thetav0)    
 
         # Initialize empty arrays to save orbit data and integration steps
-        self.pmll, self.pmbb, self.ll, self.bb, self.vlos, self.dist = (numpy.zeros(self.size) for i in xrange(6))
+        self.pmll, self.pmbb, self.ll, self.bb, self.vlos, self.dist, self.energy_var = \
+                                                                            (numpy.zeros(self.size) for i in xrange(7))
         self.orbits = [None] * self.size
     
     
@@ -161,6 +170,11 @@ class HVSsample:
                                                 self.orbits[i].pmbb(self.tflight[i], use_physical=True)  , \
                                                 self.orbits[i].vlos(self.tflight[i], use_physical=True)  
 
+            # Energy check
+            if(check):
+                energy_array = self.orbits[i].energy(ts)
+                idxs_energy = np.absolute(energy_array/energy_array[0] - 1) >  energy_threshold
+                self.energy_var[i] = idx_energy.sum()/nsteps[i] # percentage of outliars
 
         # Radial velocity and distance + distance modulus
         self.vlos, self.dist = self.vlos * u.km/u.s, self.dist * u.kpc
@@ -174,7 +188,12 @@ class HVSsample:
         # Done propagating
         self.cattype = 1    
     
-    
+        # Save the energy check information
+        if(check):
+            from astropy.table import Table
+            e_data = Table([self.m, self.tflight, self.energy_var], names=['m', 'tflight', 'pol'])
+            e_data.write('e_data.fits', overwrite=True)
+        
     def gaia(self):
         #TODO
         return True

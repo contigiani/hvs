@@ -9,17 +9,17 @@ ejectionmodel = Rossi2017()
 
 # generate...
 
-fit_sample = HVSsample(ejectionmodel, name='FIT', n=1e5, pl=True, verbose=True)
-fit_sample.save('ejcatalog_fit.fits')
-mc_sample = HVSsample(ejectionmodel, name='MC', n=1e5, verbose=True) # pl=False is the default value
+#fit_sample = HVSsample(ejectionmodel, name='FIT', n=1e5, pl=True, verbose=True)
+#fit_sample.save('ejcatalog_fit.fits')
+mc_sample = HVSsample(ejectionmodel, name='MC', n=1e6, verbose=True) # pl=False is the default value
 mc_sample.save('ejcatalog_mc.fits')
 
 
 # ...or load
-'''
-mc_sample = HVSsample('ejcatalog_mc.fits')
+
+#mc_sample = HVSsample('ejcatalog_mc.fits')
 fit_sample = HVSsample('ejcatalog_fit.fits')
-'''
+
 
 # Plot the mass distributions, for comparison
 from matplotlib import pyplot as plt

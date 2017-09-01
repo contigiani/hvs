@@ -73,10 +73,10 @@ class Rossi2017(EjectionModel):
             Add a modifier to the class name
         vm_params : list
             Parameters of the velocity/mass ejection distribution component. These are the parameters a, b, c, d, e
-            in Marchetti 2017b
+            in Contigiani+ 2017
         r_params : list
             Parameters of the radial ejection distribution component. In order: mean value, standard deviation, max 
-            number of sigmas, see Marchetti 2017b
+            number of sigmas, see Contigiani+ 2017
         '''
         if(name_modifier is not None):
             self._name = 'Rossi 2017 - ' + name_modifier
@@ -110,7 +110,7 @@ class Rossi2017(EjectionModel):
         
     def R(self, m, v, r):
         '''
-            Ejection rate distribution
+            Ejection rate distribution for likelihood computation
             
             Parameters
             ----------
@@ -132,8 +132,8 @@ class Rossi2017(EjectionModel):
             raise ValueError('The input Quantities must have the same shape.')
         
         #Boundaries of the space:
-        idx = (v > self.v_range[0]) & (v < self.v_range[1]) & (m > self.m_range[0]) \
-                & (m < self.m_range[1]) & (r < self.Nsigma) & (r>=0)
+        idx = (v >= self.v_range[0]) & (v <= self.v_range[1]) & (m >= self.m_range[0]) \
+                & (m <= self.m_range[1]) & (r < self.Nsigma) & (r>=0)
         
         result = np.full(r.shape, np.nan)
         result[~idx] = 0
@@ -175,7 +175,7 @@ class Rossi2017(EjectionModel):
 
     def _lnprob_q_a_mp(self, data):   
         '''
-        
+            Complete log-distribution in q, a, mp. 
         '''
         
         q, a, mp = np.atleast_1d(data[0]), np.atleast_1d(data[1]), np.atleast_1d(data[2])
@@ -186,13 +186,15 @@ class Rossi2017(EjectionModel):
         
         result[~idxboundary] = -np.inf
         result[idxboundary] = self._lnprobq(q[idxboundary]) + self._lnproba(a[idxboundary]) + \
-                                self._lnprobmp(mp[idxboundary])
-    
+                                self._lnprobmp(mp[idxboundary]) - np.log(126.491106407*mp**(5./2.)-0.4) \
+                                - np.log(np.log(2000)-np.log(2.5*mp)) # The last two terms are range normalizations!
+                                
+                                
         return result
     
     
     def _lnprobq(self, q):
-        # Auxilary function for _lnprob_q_a_mp - mass ratio distribution
+        # Auxilary function for _lnprob_q_a_mp - mass ratio distribution (if you change this, you must change the)
         
         return -3.5*np.log(q)
     
@@ -290,7 +292,6 @@ class Rossi2017(EjectionModel):
         else:
             # q, a, mp
             ndim = 3
-            nwalkers = 10
             p0 = [np.random.rand(3)*np.array([0.1,1.,1.])+np.array([0.5, 10, 3]) for i in xrange(nwalkers)]
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self._lnprob_q_a_mp)
             
