@@ -24,7 +24,7 @@ def t_MS(m,xi=0):
 
 
 def a_coeff(xi,n):
-    #Auxilary function for t_MS()
+    #Auxiliary function for t_MS()
     if n == 1:
 
             alpha = 1.593890e3
@@ -108,14 +108,14 @@ def a_coeff(xi,n):
     return alpha + beta*xi + gamma*xi**2. + eta*xi**3. + mu*xi**4.
 
 def x_param(xi):
-    #Auxilary function for t_MS()
+    #Auxiliary function for t_MS()
     return max( 0.95, min(0.95 - 0.03*(xi + 0.30103), 0.99) )
 
 def Mu_param(M,xi):
-    #Auxilary function for t_MS()
+    #Auxiliary function for t_MS()
     return max( 0.5, 1.0 - 0.01*max( a_coeff(xi,6)/M**a_coeff(xi,7), a_coeff(xi,8) + a_coeff(xi,9)/M**a_coeff(xi,10) ) )
 
 def t_BGB(M,xi):
-    #Auxilary function for t_MS()
+    #Auxiliary function for t_MS()
     return (a_coeff(xi,1) + a_coeff(xi,2)*M**4. + a_coeff(xi,3)*M**5.5 + M**7.) / (a_coeff(xi,4)*M**2. + a_coeff(xi,5)*M**7.)
 

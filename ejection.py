@@ -110,7 +110,7 @@ class Rossi2017(EjectionModel):
         
     def R(self, m, v, r):
         '''
-            Ejection rate distribution for likelihood computation
+            Ejection rate distribution for likelihood
             
             Parameters
             ----------
@@ -181,32 +181,50 @@ class Rossi2017(EjectionModel):
         q, a, mp = np.atleast_1d(data[0]), np.atleast_1d(data[1]), np.atleast_1d(data[2])
         result = np.full(q.shape, np.nan)
         
-        #boundary
+        # Boundary
         idxboundary = (q >= 0.1/mp) & (q <= 1) & (mp >= 0.1) & (mp <= 100) & (a>=2.5*mp) & (a<2000)
         
         result[~idxboundary] = -np.inf
+        
+        # In the following expression the last two terms are range normalizations. See documentation. 
         result[idxboundary] = self._lnprobq(q[idxboundary]) + self._lnproba(a[idxboundary]) + \
-                                self._lnprobmp(mp[idxboundary]) - np.log(126.491106407*mp**(5./2.)-0.4) \
-                                - np.log(np.log(2000)-np.log(2.5*mp)) # The last two terms are range normalizations!
+            self._lnprobmp(mp[idxboundary]) - np.log(self._probq_int(1.) - self._probq_int(0.1/mp[idxboundary])) \
+            - np.log(self._proba_int(2000)-self.proba_int(2.5*mp[idxboundary]))
                                 
                                 
         return result
     
     
     def _lnprobq(self, q):
-        # Auxilary function for _lnprob_q_a_mp - mass ratio distribution (if you change this, you must change the)
+        # Auxiliary function for _lnprob_q_a_mp - mass ratio log-distribution (if you change this, you must change the
+        # function _probq_int too!)
         
         return -3.5*np.log(q)
     
     
+    def _probq_int(self, q):
+        # Auxiliary  function for _lnprob_q_a_mp - integral of the mass ratio distribution (if you change this, 
+        # you must change the function _lnprobq too!)
+    
+        return -0.4/q**(2.5)
+    
+    
     def _lnproba(self, a):
-        # Auxilary function for _lnprob_q_a_mp - semi-major axis distribution
+        # Auxiliary function for _lnprob_q_a_mp - semi-major axis distribution (if you change this, you must change the
+        # function _proba_int too!)
         
         return -np.log(a)
     
     
+    def _proba_int(self, a):
+        # Auxiliary  function for _lnprob_q_a_mp - integral of the mass ratio distribution (if you change this, 
+        # you must change the function _lnproba too!)
+    
+        return np.log(a)
+    
+    
     def _lnprobmp(self, mp):
-        # Auxilary function for _lnprob_q_a_mp - IMF for primary mass
+        # Auxiliary function for _lnprob_q_a_mp - IMF for primary mass
         
         result = np.full(mp.shape, np.nan)
         idx = mp > 0.5 #Cutoff of the Kroupa IMF
@@ -225,7 +243,11 @@ class Rossi2017(EjectionModel):
             
             In this second case, the functions _lnprobq(), _lnproba(), _lnprobmp() dictate the parameters of the 
             progenitor binary population. They are respectively the distributions of the mass ratio, semi-major axis 
-            and primary mass. The following boundaries are imposed by default:
+            and primary mass. The indefinite integrals of these functions should also be defined: _lnprobq_int,
+            _lnproba_int, _lnprobmp_int. 
+            
+            
+            The following boundaries are imposed by default on these quantities:
             
             ::    0.1/mp<q<1, Rsun*(mp/Msun)<a<2000*Rsun, 0.1<mp<1
             
@@ -262,8 +284,8 @@ class Rossi2017(EjectionModel):
         nwalkers = 10
         n = int(ceil(n/nwalkers)*nwalkers)
         
-        # Mass and velocity magnitude
         if(pl):
+            # Sample stellar mass and velocity magnitude
             ndim = 2
             p0 = [np.random.rand(2)*np.array([1, 100])+np.array([3, 1000]) for i in xrange(nwalkers)]
             
@@ -290,7 +312,7 @@ class Rossi2017(EjectionModel):
             m, v = sampler.flatchain[:,0]*u.Msun, sampler.flatchain[:,1]*u.km/u.s
         
         else:
-            # q, a, mp
+            # Sample the binary properties q, a, mp
             ndim = 3
             p0 = [np.random.rand(3)*np.array([0.1,1.,1.])+np.array([0.5, 10, 3]) for i in xrange(nwalkers)]
             sampler = emcee.EnsembleSampler(nwalkers, ndim, self._lnprob_q_a_mp)
