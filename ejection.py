@@ -189,7 +189,7 @@ class Rossi2017(EjectionModel):
         # In the following expression the last two terms are range normalizations. See documentation. 
         result[idxboundary] = self._lnprobq(q[idxboundary]) + self._lnproba(a[idxboundary]) + \
             self._lnprobmp(mp[idxboundary]) - np.log(self._probq_int(1.) - self._probq_int(0.1/mp[idxboundary])) \
-            - np.log(self._proba_int(2000)-self.proba_int(2.5*mp[idxboundary]))
+            - np.log(self._proba_int(2000)-self._proba_int(2.5*mp[idxboundary]))
                                 
                                 
         return result
@@ -210,21 +210,21 @@ class Rossi2017(EjectionModel):
     
     
     def _lnproba(self, a):
-        # Auxiliary function for _lnprob_q_a_mp - semi-major axis distribution (if you change this, you must change the
+        # Auxiliary function for _lnprob_q_a_mp - semi-major axis log-distribution (if you change this, you must change the
         # function _proba_int too!)
         
         return -np.log(a)
     
     
     def _proba_int(self, a):
-        # Auxiliary  function for _lnprob_q_a_mp - integral of the mass ratio distribution (if you change this, 
+        # Auxiliary  function for _lnprob_q_a_mp - integral of the semi-major axis distribution (if you change this, 
         # you must change the function _lnproba too!)
     
         return np.log(a)
     
     
     def _lnprobmp(self, mp):
-        # Auxiliary function for _lnprob_q_a_mp - IMF for primary mass
+        # Auxiliary function for _lnprob_q_a_mp - log-IMF for primary mass
         
         result = np.full(mp.shape, np.nan)
         idx = mp > 0.5 #Cutoff of the Kroupa IMF
@@ -243,13 +243,13 @@ class Rossi2017(EjectionModel):
             
             In this second case, the functions _lnprobq(), _lnproba(), _lnprobmp() dictate the parameters of the 
             progenitor binary population. They are respectively the distributions of the mass ratio, semi-major axis 
-            and primary mass. The indefinite integrals of these functions should also be defined: _lnprobq_int,
-            _lnproba_int, _lnprobmp_int. 
+            and primary mass. The indefinite integrals of these functions should also be defined: _probq_int(),
+            _proba_int(), _probmp_int()!
             
             
             The following boundaries are imposed by default on these quantities:
             
-            ::    0.1/mp<q<1, Rsun*(mp/Msun)<a<2000*Rsun, 0.1<mp<1
+            ::    0.1/mp<q<1, Rsun*(mp/Msun)<a<2000*Rsun, 0.1<mp<100
             
             Parameters
             ----------
