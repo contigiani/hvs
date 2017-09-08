@@ -81,7 +81,7 @@ class HVSsample:
         '''
         if(inputdata is None):
             raise ValueError('Initialize the class by either providing an \
-                                ejection model or the path of an HVS catalog.')
+                                ejection model or an input HVS catalog.')
         
         if(name is None):
             self.name = 'HVS catalog '+str(time.time())
@@ -253,8 +253,9 @@ class HVSsample:
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra', 
                     'pmdec', 'dist', 'vlos', 'e_ra', 'e_dec', 'e_pmra', 'e_pmdec', 'e_dist', 'e_vlos', 'GRVS']
         
-        data_table = Table.read(path)
         
+        data_table = Table.read(path)
+            
         #METADATA    
         data_table.meta =  {k.lower(): v for k, v in data_table.meta.items()}
         self.name = 'Unkown'
