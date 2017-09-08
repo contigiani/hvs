@@ -37,7 +37,8 @@ class Rossi2017(EjectionModel):
     '''
         HVS ejection model from Rossi 2017. Isotropic ejection from the GC, smooth Gaussian in 
         the radial direction and with powerlaw mass/velocity distribution. Can generate an ejection sample using a 
-        montecarlo approach based on inverse transform sampling (see Rossi 2014).
+        montecarlo approach based on inverse transform sampling (see Rossi+ 2014) or a powerlaw fit 
+        (see Contigiani+ 2014).
         
         Attributes
         ---------
@@ -51,6 +52,13 @@ class Rossi2017(EjectionModel):
             Milky Way lifetime
         M_BH : Quantity
             Mass of the BH at the GC
+        alpha : float
+            Exponent of the power-law for the distribution of the semi-major axis in binaries (used only if pl=True in
+            sampler())
+        gamma : float
+            Exponent of the power-law for the distribution of the mass ratio in binaries (used only if pl=True in 
+            sampler())
+        
         
         Methods
         -------
@@ -62,7 +70,10 @@ class Rossi2017(EjectionModel):
     v_range = [450, 5000]*u.km/u.s
     m_range = [0.1, 10]*u.Msun
     T_MW = 13.8*u.Gyr # MW maximum lifetime from Planck2015
-    M_BH = 4e6*u.Msun #
+    M_BH = 4e6*u.Msun # Black hole mass
+    
+    alpha = -1.
+    gamma = -3.5
     
     def __init__(self, name_modifier = None, vm_params = [1530*u.km/u.s, -0.65, -1.7, -6.3, -1], \
                     r_params = [3*u.pc, 100*u.pc, 4]):
@@ -199,15 +210,22 @@ class Rossi2017(EjectionModel):
     def _inverse_cumulative_a(self, x, mp):
         amin = 2.5*mp
         amax = 2000.
-        return amin*(amax/amin)**x 
+        
+        if self.alpha==-1:
+            return amin*(amax/amin)**x 
+        else:
+            return (  (amax**(1.+self.alpha) - amin**(1.+self.alpha))*x + amin**(1.+self.alpha) )**(1./(1.+self.alpha))
     
     
     def _inverse_cumulative_q(self, x, mp):
         qmin = 0.1/mp
         qmax = 1.
-        alpha = -3.5
-        return (  (qmax**(1.+alpha) - qmin**(1.+alpha))*x + qmin**(1.+alpha) )**(1./(1.+alpha))
- 
+        
+        if self.gamma==-1:
+            return qmin*(qmax/qmin)**x 
+        else:
+            return (  (qmax**(1.+self.gamma) - qmin**(1.+self.gamma))*x + qmin**(1.+self.gamma) )**(1./(1.+self.gamma))
+    
     def sampler(self, n, xi = 0, pl=False, verbose=False):
         '''
             Samples from the ejection distribution to generate an ejection sample. 
