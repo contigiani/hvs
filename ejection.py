@@ -37,7 +37,7 @@ class Rossi2017(EjectionModel):
     '''
         HVS ejection model from Rossi 2017. Isotropic ejection from the GC, smooth Gaussian in 
         the radial direction and with powerlaw mass/velocity distribution. Can generate an ejection sample using a 
-        montecarlo approach (see Rossi 2014).
+        montecarlo approach based on inverse transform sampling (see Rossi 2014).
         
         Attributes
         ---------
@@ -86,7 +86,6 @@ class Rossi2017(EjectionModel):
     
         self.a, self.b, self.c, self.d, self.e = vm_params
         self.centralr, self.sigmar, self.Nsigma = r_params
-    
     
     def g(self, r):
         '''
@@ -171,80 +170,53 @@ class Rossi2017(EjectionModel):
         
         
         return result
-        
 
-    def _lnprob_q_a_mp(self, data):   
+    def _inverse_cumulative_mp(self, x):
         '''
-            Complete log-distribution in q, a, mp. 
+            Inverse of the cumulative function of the Kroupa IMF f(mp) as a function of x.
+            
+            F(mp) = int_[0.1, 100] f(mp)
+            
+            returns mp such that 
+            
+            F(mp) = x
+            
         '''
+        x = np.atleast_1d(x)
         
-        q, a, mp = np.atleast_1d(data[0]), np.atleast_1d(data[1]), np.atleast_1d(data[2])
-        result = np.full(q.shape, np.nan)
+        F_cut = 0.729162 # F(x) at the breaking point
+        total_int = 6.98626 # total integral of the broken power law between 0.1 and 100
         
-        # Boundary
-        idxboundary = (q >= 0.1/mp) & (q <= 1) & (mp >= 0.1) & (mp <= 100) & (a>=2.5*mp) & (a<2000)
         
-        result[~idxboundary] = -np.inf
+        idx_cut = x<F_cut
+        result = np.zeros(x.shape)
         
-        # In the following expression the last two terms are range normalizations. See documentation. 
-        result[idxboundary] = self._lnprobq(q[idxboundary]) + self._lnproba(a[idxboundary]) + \
-            self._lnprobmp(mp[idxboundary]) - np.log(self._probq_int(1.) - self._probq_int(0.1/mp[idxboundary])) \
-            - np.log(self._proba_int(2000)-self._proba_int(2.5*mp[idxboundary]))
-                                
-                                
+        result[idx_cut] = ((0.1)**(-0.3)-x[idx_cut]*0.3*0.5*total_int)**(1./(-0.3))
+        result[~idx_cut] = (-total_int * (x[~idx_cut] - F_cut)*(1.3) + (0.5)**(-1.3))**(-1./1.3)
+
         return result
+ 
+    def _inverse_cumulative_a(self, x, mp):
+        amin = 2.5*mp
+        amax = 2000.
+        return amin*(amax/amin)**x 
     
     
-    def _lnprobq(self, q):
-        # Auxiliary function for _lnprob_q_a_mp - mass ratio log-distribution (if you change this, you must change the
-        # function _probq_int too!)
-        
-        return -3.5*np.log(q)
-    
-    
-    def _probq_int(self, q):
-        # Auxiliary  function for _lnprob_q_a_mp - integral of the mass ratio distribution (if you change this, 
-        # you must change the function _lnprobq too!)
-    
-        return -0.4/q**(2.5)
-    
-    
-    def _lnproba(self, a):
-        # Auxiliary function for _lnprob_q_a_mp - semi-major axis log-distribution (if you change this, you must change the
-        # function _proba_int too!)
-        
-        return -np.log(a)
-    
-    
-    def _proba_int(self, a):
-        # Auxiliary  function for _lnprob_q_a_mp - integral of the semi-major axis distribution (if you change this, 
-        # you must change the function _lnproba too!)
-    
-        return np.log(a)
-    
-    
-    def _lnprobmp(self, mp):
-        # Auxiliary function for _lnprob_q_a_mp - log-IMF for primary mass
-        
-        result = np.full(mp.shape, np.nan)
-        idx = mp > 0.5 #Cutoff of the Kroupa IMF
-        
-        result[idx] = -2.3*np.log(mp) + np.log(0.5)
-        result[~idx] = -1.3*np.log(mp)
-        
-        return result    
-    
-    
+    def _inverse_cumulative_q(self, x, mp):
+        qmin = 0.1/mp
+        qmax = 1.
+        alpha = -3.5
+        return (  (qmax**(1.+alpha) - qmin**(1.+alpha))*x + qmin**(1.+alpha) )**(1./(1.+alpha))
+ 
     def sampler(self, n, xi = 0, pl=False, verbose=False):
         '''
             Samples from the ejection distribution to generate an ejection sample. 
             If pl is True, the distribution in mass and velocity space is sampled from the power-law fit from
             Marchetti 2017b. If pl is False, the distribution is generated using a Montecarlo approach (Rossi 2014).
             
-            In this second case, the functions _lnprobq(), _lnproba(), _lnprobmp() dictate the parameters of the 
-            progenitor binary population. They are respectively the distributions of the mass ratio, semi-major axis 
-            and primary mass. The indefinite integrals of these functions should also be defined: _probq_int(),
-            _proba_int(), _probmp_int()!
+            In this second case, the functions _inverse_cumulative_mp, _inverse_cumulative_a, _inverse_cumulative_q 
+            dictate the parameters of the progenitor binary population. They are the inverse cumulative distributions 
+            of the mass ratio, semi-major axis and primary mass respectively.
             
             
             The following boundaries are imposed by default on these quantities:
@@ -281,10 +253,10 @@ class Rossi2017(EjectionModel):
         import emcee
         PI = np.pi
         
-        nwalkers = 10
-        n = int(ceil(n/nwalkers)*nwalkers)
-        
         if(pl):
+            nwalkers = 100
+            n = int(ceil(n/nwalkers)*nwalkers)    
+            
             # Sample stellar mass and velocity magnitude
             ndim = 2
             p0 = [np.random.rand(2)*np.array([1, 100])+np.array([3, 1000]) for i in xrange(nwalkers)]
@@ -293,49 +265,71 @@ class Rossi2017(EjectionModel):
         
             if(verbose):
                 print('burn in...')
-            pos, prob, state = sampler.run_mcmc(p0, 1000)
+            pos, prob, state = sampler.run_mcmc(p0, 5000)
             if(verbose):
                 print('burn in done')
+                
+                try:
+                    print("Mean acceptance fraction at burn in:")
+                    print(np.mean(sampler.acceptance_fraction))
+                    print("Autocorrelation time at burn in:")
+                    print(sampler.get_autocorr_time())
+                except Exception:
+                    print("----")
+                    pass
 
             sampler.reset()
             sampler.run_mcmc(pos, int(n/nwalkers), rstate0=state)
             
             if(verbose):
                 try:
-                    print("Mean acceptance fraction:")
+                    print("Mean acceptance fraction when sampling:")
                     print(np.mean(sampler.acceptance_fraction))
-                    print("Autocorrelation time:")
+                    print("Autocorrelation time when sampling:")
                     print(sampler.get_autocorr_time())
                 except Exception:
+                    print("----")
                     pass
         
             m, v = sampler.flatchain[:,0]*u.Msun, sampler.flatchain[:,1]*u.km/u.s
         
         else:
-            # Sample the binary properties q, a, mp
-            ndim = 3
-            p0 = [np.random.rand(3)*np.array([0.1,1.,1.])+np.array([0.5, 10, 3]) for i in xrange(nwalkers)]
-            sampler = emcee.EnsembleSampler(nwalkers, ndim, self._lnprob_q_a_mp)
+            # Sample the binary properties q, a, mp using inverse sampling 
+            from scipy.optimize import fsolve
+            
+            n = int(n)
+            
+            # Inverse sampling 
+            uniform_for_mp, uniform_for_q, uniform_for_a = np.random.uniform(0, 1, (3, n))
+            mp = self._inverse_cumulative_mp(uniform_for_mp)
+            a, q = self._inverse_cumulative_a(uniform_for_a, mp), self._inverse_cumulative_q(uniform_for_q, mp)
+            mp, a = mp*u.Msun, a*u.Rsun
             
             if(verbose):
-                print('burn in...')
-            pos, prob, state = sampler.run_mcmc(p0, 1000)
-            if(verbose):
-                print('burn in done')
-
-            sampler.reset()
-            sampler.run_mcmc(pos, int(n/nwalkers), rstate0=state)
-            
-            if(verbose):
-                try:
-                    print("Mean acceptance fraction:")
-                    print(np.mean(sampler.acceptance_fraction))
-                    print("Autocorrelation time:")
-                    print(sampler.get_autocorr_time())
-                except Exception:
-                    pass
-        
-            q, a, mp = sampler.flatchain[:,0], sampler.flatchain[:,1]*u.Rsun, sampler.flatchain[:,2]*u.Msun
+                from matplotlib import pyplot as plt
+                
+                plt.figure()
+                plt.hist(mp, bins=np.logspace(-1, 2, 30))
+                plt.xscale('log')
+                plt.yscale('log')
+                plt.title('mp distribution')
+                plt.show()
+                
+                plt.figure()
+                plt.hist(q, bins=np.logspace(-3, 1, 30))
+                plt.xscale('log')
+                plt.yscale('log')
+                plt.title('q distribution')
+                plt.show()
+                
+                plt.figure()
+                plt.hist(a, bins=np.logspace(np.log10(0.25), np.log10(2000), 30))
+                plt.xscale('log')
+                plt.yscale('log')
+                plt.title('a distribution')
+                plt.show()
+                
+                
             
             ur = np.random.uniform(0,1,n)
             idx = ur>=0.5

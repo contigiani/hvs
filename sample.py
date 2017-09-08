@@ -118,13 +118,13 @@ class HVSsample:
                 dt : Quantity
                     Integration timestep. Defaults to 0.01 Myr
                 check : bool
-                    Flag to check the energy of the orbits remains constant over time, also saves a .e_data
+                    Flag to check the energy of the orbits remains constant over time, also saves a E_data.fits
                     file in the current directory containing the percentage of integration steps that are defined as
                     energy outliars. Defaults to False
                 threshold : float
                     Maximum relative energy difference between the initial energy and the energy at any point needed
                     to consider an integration step an energy outliar. Defaults to 0.01, meaning that any excess or 
-                    deficit of 1% (or more) of the initial energy is enough to be registered as ourliar
+                    deficit of 1% (or more) of the initial energy is enough to be registered as outliar
                 
         '''
         from galpy.orbit import Orbit
@@ -152,7 +152,6 @@ class HVSsample:
         self.pmll, self.pmbb, self.ll, self.bb, self.vlos, self.dist, self.energy_var = \
                                                                             (np.zeros(self.size) for i in xrange(7))
         self.orbits = [None] * self.size
-    
     
         #Integration loop for the self.size orbits
         for i in xrange(self.size):
@@ -194,7 +193,7 @@ class HVSsample:
         if(check):
             from astropy.table import Table
             e_data = Table([self.m, self.tflight, self.energy_var], names=['m', 'tflight', 'pol'])
-            e_data.write('e_data.fits', overwrite=True)
+            e_data.write('E_data.fits', overwrite=True)
         
     def gaia(self):
         #TODO
