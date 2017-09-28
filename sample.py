@@ -27,7 +27,9 @@ class HVSsample:
                 0 if ejection sample, 1 is galactic sample, 2 if Gaia sample
             self.dt : Quantity
                 Timestep used for orbit integration, 0.01 Myr by default
-                
+            self.T_MW : Quantity
+                Milky Way maximum lifetime
+            
             self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0
                 Initial phase space coordinates at ejection in cylindrical coordinates
             self.ra, self.dec, self.dist, self.pmra, self.pmdec, self.vlos : Quantity
@@ -67,7 +69,9 @@ class HVSsample:
     # U, V, W in km/s in galactocentric coordinates. Galpy notation requires U to have a minus sign. 
     solarmotion = [-14., 12.24, 7.25]  
     dt = 0.01*u.Myr
-
+    T_MW = 13.8*u.Gyr # MW maximum lifetime from Planck2015
+    
+    
     def __init__(self, inputdata=None, name=None, **kwargs):
         '''
         Parameters
@@ -144,8 +148,8 @@ class HVSsample:
         phi = self.phi0
         
         #... and velocity
-        vR = self.v0 * np.sin(self.thetav0) * np.cos(self.phi0)
-        vT = self.v0 * np.sin(self.thetav0) * np.sin(self.phi0)
+        vR = self.v0 * np.sin(self.thetav0) * np.cos(self.phiv0)
+        vT = self.v0 * np.sin(self.thetav0) * np.sin(self.phiv0)
         vz = self.v0 * np.cos(self.thetav0)    
 
         # Initialize empty arrays to save orbit data and integration steps
@@ -200,10 +204,114 @@ class HVSsample:
         return True
         
         
-    def likelihood(self, potential, ejmodel):
-        #TODO
-        return True
+    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, n_samples=1, cov = None, \
+                    weights=None):
+        '''
+        Computes the non-normalized log-likelihood of a given potential and ejection model for a given potential.
+        When comparing different ejection models, make sure you renormalize the likelihood accordingly. 
         
+        Can return the log-likelihoods of individual stars if individual is set to True. 
+        
+        Parameters
+        ----------
+        potential : galpy potential
+            Potential to integrate the orbits with.
+        ejmodel : EjectionModel object
+            Ejectionmodel to be tested.
+        individual : bool
+            If set to True, returns . The default value is False.
+        n_samples : int
+            Number of point to sample for the errorbars
+        cov : iterable
+            Covariance matrix for errors in the observed quantities. If not speficied, the errors in the sample are
+            used instead. 
+        weights : iterable
+            List or array containing the weights for the log-likelihoods of the different stars.
+        xi : float or array
+            Assumed metallicity for stellar lifetime
+        
+        
+        Returns
+        -------
+        
+        log likelihood values : numpy.array or float
+            Returns the log-likelihood of the entire sample or the log-likelihood for every single star if individual
+            is True. 
+        
+        '''
+        
+        n_samples = np.array(n_samples)
+        weights = np.array(weights)
+        cov = np.array(cov)
+        
+        
+        if(self.cattype == 0):
+            raise ValueError("The likelihood can be computed only for a propagated sample.")
+            
+        if(self.size > 1e3):
+            print("You are computing the likelihood of a large sample. This might take a while.")
+
+        if((weights is not None) and (weights.size != self.size)):
+            raise ValueError('The length of weights must be equal to the number of HVS in the sample.')
+        
+        if(cov is not None):
+            if((cov.shape is not (7,7)) or (cov.shape is not (6,6))):
+                raise ValueError('Covariance matrix must have shape 6x6 or 7x7 (if error on mass is considered)')
+                
+        
+        #TODO sampling errorspace
+        
+        
+        self.backwards_orbits = [None] * self.size
+        self.back_dt = dt
+        self.lnlike = np.ones(self.size) * (-np.inf)
+        
+        from hvs.utils import t_ms
+        lifetime = t_MS(self.m, xi)
+        lifetime[lifetime>self.T_MW] = self.T_MW
+        nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
+        nsteps[nsteps<100] = 100
+        
+        
+        import astropy.coordinates as coord
+        from gala.coordinates import vhel_to_gal
+        
+        
+        vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W) 
+        vrot = [0., 220., 0.] * u.km / u.s
+
+        RSun = 8. * u.kpc
+        zSun = 0 * u.pc 
+
+        v_sun = coord.CartesianDifferential(vSun + vrot)
+        gc = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
+        
+        
+        for i in xrange(self.size):
+            ts = np.linspace(0, 1, nsteps[i])*self.lifetime[i]
+            self.backwards_orbits[i] = Orbit(vxvv = [self.ra[i], self.dec[i], self.dist[i], \
+                                    self.pmra[i], self.pmdec[i], self.vlos[i]], \
+                                    solarmotion=self.solarmotion, radec=True).flip()
+            self.backwards_orbits[i].integrate(ts, potential, method='dopr54_c')
+                
+            dist, ll, bb, pmll, pmbb, vlos = self.backwards_orbits[i].dist(ts, use_physical=True) * u.kpc, \
+                                                self.backwards_orbits[i].ll(ts, use_physical=True) * u.deg, \
+                                                self.backwards_orbits[i].bb(ts, use_physical=True) * u.deg, \
+                                                self.backwards_orbits[i].pmll(ts, use_physical=True) *u.mas/u.year, \
+                                                self.backwards_orbits[i].pmbb(ts, use_physical=True) * u.mas/u.year, \
+                                                self.backwards_orbits[i].vlos(ts, use_physical=True) * u.km/u.s 
+
+
+            galactic = coord.Galactic(l=ll, b=bb, distance=dist, pm_l_cosb=pmll, pm_b=pmbb, radial_velocity=vlos)
+            gal = galactic.transform_to(gc)
+            vtot = np.sqrt(gal.v_x**2. + gal.v_y**2. + gal.v_z**2.).to(u.km/u.s)            
+            r = np.sqrt(gal.x**2. + gal.y**2. + gal.z**2.).to(u.kpc) 
+            
+            self.lnlike[i] = np.log((ejmodel.R(self.m, vtot, rtot) * ejmodel.g(np.linspace(0, 1, nsteps[i]))).sum())
+            
+        if(individual):
+            return self.lnlike 
+        return self.lnlikes.sum()
         
     def save(self, path):
         '''

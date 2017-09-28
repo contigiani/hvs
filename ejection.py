@@ -62,9 +62,9 @@ class Rossi2017(EjectionModel):
         
         Methods
         -------
-        g(self, r) :
+        g :
             Hypervelocity star survival function as a function of the flight time expressed as a lifetime fraction
-        R(self, m, v, r) :
+        R :
             Ejection density distribution, function of mass, total velocity, distance from GC
     ''' 
     v_range = [450, 5000]*u.km/u.s
@@ -138,7 +138,10 @@ class Rossi2017(EjectionModel):
         r = ((r - self.centralr)/self.sigmar).to(1).value # normalized r
         
         
-        if((m.shape != v.shape) or (v.shape != r.shape)):
+        if(m.shape != v.shape):
+            m =  m*np.ones(v.shape)
+        
+        if(v.shape != r.shape):
             raise ValueError('The input Quantities must have the same shape.')
         
         #Boundaries of the space:
@@ -236,6 +239,7 @@ class Rossi2017(EjectionModel):
             dictate the parameters of the progenitor binary population. They are the inverse cumulative distributions 
             of the mass ratio, semi-major axis and primary mass respectively.
             
+            The velocity vector is assumed radial. 
             
             The following boundaries are imposed by default on these quantities:
             
@@ -373,9 +377,9 @@ class Rossi2017(EjectionModel):
         phi0 = np.random.uniform(0,2*PI, n)*u.rad
         theta0 = np.arccos( np.random.uniform(-1,1, n))*u.rad
 
-        # Isotropic velocity direction in spherical coordinates, only outwards
-        phiv0 = np.random.uniform(-PI/2,PI/2, n)*u.rad
-        thetav0 = np.arccos( np.random.uniform(-1,1, n))*u.rad 
+        # The velocity vector point radially. 
+        phiv0 = np.zeros(n)*u.rad#np.random.uniform(-PI/2,PI/2, n)*u.rad
+        thetav0 = theta0 #np.arccos( np.random.uniform(-1,1, n))*u.rad 
 
         
         # Age and flight time
