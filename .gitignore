@@ -102,3 +102,7 @@ ENV/
 
 # catalogs
 *.fits
+*.npy
+
+#extra
+**extra/

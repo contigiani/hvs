@@ -48,7 +48,7 @@ class HVSsample:
             
             solarmotion : Quantity
                 Solar motion  
-            
+                
         Methods
         -------
             __init__():
@@ -111,7 +111,7 @@ class HVSsample:
             self.m, self.tage, self.tflight, self.size = ejmodel.sampler(**kwargs)
         
     
-    def propagate(self, potential, dt=0.01*u.Myr, check=False, threshold=0.01):
+    def propagate(self, potential, dt=0.01*u.Myr, threshold=None):
         '''
             Propagates the sample in the Galaxy, changes cattype from 0 to 1.
             
@@ -127,8 +127,10 @@ class HVSsample:
                     energy outliars. Defaults to False
                 threshold : float
                     Maximum relative energy difference between the initial energy and the energy at any point needed
-                    to consider an integration step an energy outliar. Defaults to 0.01, meaning that any excess or 
-                    deficit of 1% (or more) of the initial energy is enough to be registered as outliar
+                    to consider an integration step an energy outliar. E.g. for threshold=0.01, any excess or 
+                    deficit of 1% (or more) of the initial energy is enough to be registered as outliar. 
+                    A table E_data.fits is created in the working directory containing for every orbit the percentage
+                    of outliar points (pol)
                 
         '''
         from galpy.orbit import Orbit
@@ -136,6 +138,11 @@ class HVSsample:
         
         if(self.cattype > 0):
             raise RuntimeError('This sample is already propagated!')   
+        
+        if(threshold is None):
+            check = False
+        else:
+            check = True
         
         # Integration time step 
         self.dt = dt
@@ -203,12 +210,69 @@ class HVSsample:
         #TODO
         return True
         
+
+    def precision_check(self, potential, dt=0.01*u.Myr, xi=0):
+        '''
+        Computes the tangetial momentum of the stars at ejection after backwards integration. This is a numerical check
+        on the precision of the angular momentum. See Contigiani+ 2018. 
         
-    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, n_samples=1, cov = None, \
-                    weights=None):
+        
+        Parameters
+        ----------
+        potential : galpy potential
+            Potential to integrate the orbits with.
+        xi : float or array
+            Assumed metallicity for stellar lifetime
+        
+        
+        Returns
+        -------
+        
+        angular momentum values : numpy.array or float
+            Returns the angular momentum of the orbits at a time tflight. 
+        
+        '''
+        from galpy.orbit import Orbit
+        
+        self.backwards_orbits = [None] * self.size
+        self.back_dt = dt
+        
+        from hvs.utils import t_MS
+        lifetime = t_MS(self.m, xi)
+        lifetime[lifetime>self.T_MW] = self.T_MW
+        nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
+        nsteps[nsteps<100] = 100
+        
+        vR, vz, R, z = np.zeros(self.size)*u.km/u.s, np.zeros(self.size)*u.km/u.s, np.zeros(self.size)*u.kpc, \
+                                                                                    np.zeros(self.size)*u.kpc
+        
+        for i in xrange(self.size):
+            ts = np.linspace(0, 1, nsteps[i])*lifetime[i]
+            self.backwards_orbits[i] = Orbit(vxvv = [self.ra[i], self.dec[i], self.dist[i], \
+                                    self.pmra[i], self.pmdec[i], self.vlos[i]], \
+                                    solarmotion=self.solarmotion, radec=True).flip()
+            self.backwards_orbits[i].integrate(ts, potential, method='dopr54_c')
+
+            
+            vR[i] = self.backwards_orbits[i].vR(self.tflight[i], use_physical=True) *u.km/u.s
+            vz[i] = self.backwards_orbits[i].vz(self.tflight[i], use_physical=True) *u.km/u.s
+            R[i] = self.backwards_orbits[i].R(self.tflight[i], use_physical=True) *u.kpc
+            z[i] = self.backwards_orbits[i].z(self.tflight[i], use_physical=True) *u.kpc
+        
+        
+        norm = np.sqrt(z**2. + R**2.)
+        R = R/norm
+        z = z/norm
+        
+        return np.abs(vR*z -vz*R), np.abs(vR*R +vz*z)
+
+
+
+    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, n_samples=1, weights=None):
         '''
         Computes the non-normalized log-likelihood of a given potential and ejection model for a given potential.
-        When comparing different ejection models, make sure you renormalize the likelihood accordingly. 
+        When comparing different ejection models or biased samples, make sure you renormalize the likelihood 
+        accordingly. See Contigiani+ 2018. 
         
         Can return the log-likelihoods of individual stars if individual is set to True. 
         
@@ -219,12 +283,9 @@ class HVSsample:
         ejmodel : EjectionModel object
             Ejectionmodel to be tested.
         individual : bool
-            If set to True, returns . The default value is False.
+            If True the method returns individual likelihoods. The default value is False.
         n_samples : int
             Number of point to sample for the errorbars
-        cov : iterable
-            Covariance matrix for errors in the observed quantities. If not speficied, the errors in the sample are
-            used instead. 
         weights : iterable
             List or array containing the weights for the log-likelihoods of the different stars.
         xi : float or array
@@ -239,6 +300,7 @@ class HVSsample:
             is True. 
         
         '''
+        from galpy.orbit import Orbit
         
         n_samples = np.array(n_samples)
         weights = np.array(weights)
@@ -266,7 +328,7 @@ class HVSsample:
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
         
-        from hvs.utils import t_ms
+        from hvs.utils import t_MS
         lifetime = t_MS(self.m, xi)
         lifetime[lifetime>self.T_MW] = self.T_MW
         nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
@@ -286,9 +348,8 @@ class HVSsample:
         v_sun = coord.CartesianDifferential(vSun + vrot)
         gc = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
         
-        
         for i in xrange(self.size):
-            ts = np.linspace(0, 1, nsteps[i])*self.lifetime[i]
+            ts = np.linspace(0, 1, nsteps[i])*lifetime[i]
             self.backwards_orbits[i] = Orbit(vxvv = [self.ra[i], self.dec[i], self.dist[i], \
                                     self.pmra[i], self.pmdec[i], self.vlos[i]], \
                                     solarmotion=self.solarmotion, radec=True).flip()
@@ -299,20 +360,19 @@ class HVSsample:
                                                 self.backwards_orbits[i].bb(ts, use_physical=True) * u.deg, \
                                                 self.backwards_orbits[i].pmll(ts, use_physical=True) *u.mas/u.year, \
                                                 self.backwards_orbits[i].pmbb(ts, use_physical=True) * u.mas/u.year, \
-                                                self.backwards_orbits[i].vlos(ts, use_physical=True) * u.km/u.s 
-
+                                                self.backwards_orbits[i].vlos(ts, use_physical=True) * u.km/u.s
 
             galactic = coord.Galactic(l=ll, b=bb, distance=dist, pm_l_cosb=pmll, pm_b=pmbb, radial_velocity=vlos)
             gal = galactic.transform_to(gc)
             vtot = np.sqrt(gal.v_x**2. + gal.v_y**2. + gal.v_z**2.).to(u.km/u.s)            
             r = np.sqrt(gal.x**2. + gal.y**2. + gal.z**2.).to(u.kpc) 
-            
             self.lnlike[i] = np.log((ejmodel.R(self.m, vtot, rtot) * ejmodel.g(np.linspace(0, 1, nsteps[i]))).sum())
-            
+           
         if(individual):
             return self.lnlike 
         return self.lnlikes.sum()
-        
+    
+    
     def save(self, path):
         '''
             Saves the sample in a FITS file. 

@@ -5,7 +5,8 @@ Generate mock catalogs of hypervelocity stars in the Milky Way.
 
 ## Setup
 
-Despite the fact that is a python module, the `setup.py` file does not exists (yet). To use the module, make sure that `hvs/` is in a directory included in your **PYTHONPATH** environment variable.
+Despite the fact that is a python module, the `setup.py` file does not exists (yet). To use the module, make sure that 
+`hvs/` is in a directory included in your **PYTHONPATH** environment variable.
 
 ## Documentation
 
@@ -23,9 +24,10 @@ the expected flight time and age at observation can also be sampled at this time
 
 
 ### Ejection models
-The class `Rossi2017` inside `ejection.py` is an example of a pre-modelled ejection method.
+The classes `Rossi2017` and `Contigiani2018` inside `ejection.py` are two examples of pre-modelled ejection methods.
     
-The class `EjectionModel` is the basic structure every ejection model class should be based on. Please make sure that custom ejection models are based on that.
+The class `EjectionModel` is the basic structure every ejection model class should be based on. Custom ejection models 
+should follow the same structure.
 
 ### Examples and more
 See the `examples/` directory for some basic scripts.
@@ -34,7 +36,7 @@ See the `examples/` directory for some basic scripts.
 
 - `split.py` shows how the orbit propagation and be parallelized over multiple machines or processes.
 
-- `Rossi2017comparison.py` is a comparison between the two sampling methods for this ejection mechanism. 
+- `RossiContigianicomparison.py` is a comparison between the two sampling methods for these ejection mechanisms. 
     
     
 
