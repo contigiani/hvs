@@ -100,9 +100,13 @@ ENV/
 # mypy
 .mypy_cache/
 
-# catalogs
+# Catalogs
 *.fits
 *.npy
 
-#extra
+# Extra
 **extra/
+
+# MacOs files
+**DS_Store
+**._*

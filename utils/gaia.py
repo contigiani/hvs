@@ -1,110 +1,116 @@
-import numpy
+import numpy as np
 from scipy import interpolate
 from astropy import units as u
-np = numpy
+import hurley_stellar_evolution as hse
+from astropy import constants as const
 
+Id, A_v, GMag_0, VMag_0, IcMag_0 = np.loadtxt('interp_data.txt', unpack = True)
+rbf_2_G =  interpolate.Rbf(Id, A_v, GMag_0, function = 'linear')
+rbf_2_V =  interpolate.Rbf(Id, A_v, VMag_0, function = 'linear')
+rbf_2_Ic = interpolate.Rbf(Id, A_v, IcMag_0, function = 'linear')
 
-
-'''
-    To be reimplemented using Marchetti+ 2017b
-'''
-
-
-#PyGaia
-from pygaia.errors.astrometric import  properMotionError, parallaxError, positionErrorSkyAvg, positionError
-from pygaia.errors.spectroscopic import vradErrorSkyAvg
-from pygaia.photometry.transformations import vminGrvsFromVmini
-
-#Interpolation points 
-#http://www.cosmos.esa.int/web/gaia/science-performance
-#
-
-_GUMSFITM = [0.5, 0.7, 0.8, 0.95, 1.10, 1.7, 2.1, 3.25, 6.5, 9, 18.]
-_GUMSFITG = [8.8, 7., 6., 4.6, 4.1, 2.2, 1.5, -0.03, -1.9, -2.7, -3.5]
-_GUMSFITV = [8.62, 7.21, 5.58, 4.78, 4.24, 2.19, 1.43, 0.0, -1.71, -2, -3.5]
-_GUMSFITVI = [1.71, 1.23, 0.87, 0.74, 0.67, 0.38, 0.15, 0.01, -0.15, -0.2, -0.35]
-_GUMSFITVRADA, _GUMSFITVRADB, _VCF, _VZM = [1.15, 1.15, 1.15, 1.15, 1.15, 1.15, 1.15, 1.0, 0.9,0.9, 0.9], [0.29, 0.29, 0.5, 0.6, 0.7, 1.5, 4.0, 5.5, 26.0, 32., 50.0], 0.5, 12.7
-
-
-#Interpolation functions
-_GfromM = interpolate.InterpolatedUnivariateSpline(_GUMSFITM, _GUMSFITG, k=1)
-_VfromM = interpolate.InterpolatedUnivariateSpline(_GUMSFITM, _GUMSFITV, k=1)
-_VIfromM = interpolate.InterpolatedUnivariateSpline(_GUMSFITM, _GUMSFITVI, k=1)
-_AfromM = interpolate.InterpolatedUnivariateSpline(_GUMSFITM, _GUMSFITVRADA, k=1)
-_BfromM = interpolate.InterpolatedUnivariateSpline(_GUMSFITM, _GUMSFITVRADB, k=1)
-
-
-#Conversion factors from A(B-V) to absorption in different passbands and colors
-_FACG = 2.425
-_FACV = 2.742
-_FACVI = 1.237
-_FACGRVS = 1.322
-
-def GRVS(M, Abv, mu):
+def get_errors(r, l, b, M, age, dust):
     '''
-        Magnitude in GRVS band.
-        
+        Computes Gaia Grvs magnitudes and errorbars given the input.
+        Written by TM (see author list)
+
         Parameters
         ----------
-        M : float
-            Stellar mass. [Msun]
+            r : Quantity
+                distance form the Earth
+            l : Quantity
+                Galactic latitude
+            b : Quantity
+                Galactic longitude
+            age : Quantity
+                Stellar age
+            dust : DustMap
+                DustMap to be used
+
+        Returns
+        -------
+            e_par, e_pmra, e_pmdec : Quantity
+                errors in parallax, pmra* and pmdec.
     '''
-    M = M.to('Msun').value
-    return -vminGrvsFromVmini(_VIfromM(M)) + _VfromM(M) + _FACGRVS*Abv + mu
+
+    def closest_spectrum(Teff,Logg):
+        '''
+            Finds the spectrum from the BaSel library which matches the given
+            Teff, Logg
+        '''
+    	Met = 0. # Assumption: Considering only Solar Metallicities!
+    	Vturb = 2.00 # Atmospheric micro-turbulence velocity [km/s]
+    	XH = 0.00 # Mixing length
+
+    	files, Id, T, logg, met, Vt, Xh = np.loadtxt('spectrum_data.txt', dtype = 'str', unpack=True)
+    	Id = np.array(Id,dtype='float')
+    	T = np.array(T,dtype='float')
+    	logg = np.array(logg,dtype='float')
+    	met = np.array(met,dtype='float')
+    	Vt = np.array(Vt, dtype = 'float')
+    	Xh = np.array(Xh, dtype='float')
+
+    	ds = np.sqrt( (T - Teff)**2. + (logg - Logg)**2. + (Met - met)**2. + (Vturb - Vt)**2. + (Xh - XH)**2. )
+    	indexm = np.where(ds == np.min(ds)) # Chi-square minimization
+
+    	identification = Id[indexm]
+
+    	return identification
+
+    def G_to_GRVS( G, V_I ):
+        # From Gaia G band magnitude to Gaia G_RVS magnitude
+    	# Jordi+ 2010 , Table 3, second row:
+
+    	a = -0.0138
+    	b = 1.1168
+    	c = -0.1811
+    	d = 0.0085
+
+    	f = a + b * V_I + c * V_I**2. + d * V_I**3.
+
+    	return G - f # G_RVS magnitude
 
 
-def vradError(M, Av, mu):
-    '''
-        Error in radial velocity.
-        
-        Parameters
-        ----------
-        M : float
-            Stellar mass. [Msun]
-    '''
-    return (_VCF + _BfromM(M)*np.exp(_AfromM(M)*(_VfromM(M) + _FACV*Abv + mu -_VZM))) * u.km/u.s
+    #Ecliptic latitude from Jordi+ 2010,  Eq. 7
+	beta = np.arcsin(abs(0.4971*np.sin(b) + 0.8677*np.cos(b)*np.sin(l - 6.38 * u.deg))).to('rad').value
+	if np.isnan(beta) == True:
+		beta = -np.pi/2.
 
-def pmError(M, Abv, mu, beta=None):
-    '''
-        Error in propermotion in the two directions (RA*, DEC).
-        
-        Parameters
-        ----------
-        M : float
-            Stellar mass. [Msun]
-        beta : float
-            Ecliptic latitude (rad)
-    '''
-    if(beta is None):
-        return properMotionErrorSkyAvg(_GfromM(M) + mu + _FACG*Abv, _VIfromM(M) + _FACVI*Abv) *u.uas / u.year
-    return properMotionError(_GfromM(M) + mu + _FACG*Abv, _VIfromM(M) + _FACVI*Abv, beta) *u.uas / u.year
+	T, R = hse.get_TempRad( M.to(u.solMass).value, 0, age.to(u.Myr).value) # Temperature [K], radius [solRad]
 
-def posError(M, Abv, mu, beta=None):
-    '''
-        Error in position in the two directions (RA*, DEC).
-        
-        Parameters
-        ----------
-        M : float
-            Stellar mass.
-        beta : float
-            Ecliptic latitude (rad)
-    '''
-    if(beta is None):
-        return positionErrorSkyAvg(_GfromM(M) + mu + _FACG*Abv, _VIfromM(M) + _FACVI*Abv)*u.uas
-    return positionError(_GfromM(M) + mu + _FACG*Abv, _VIfromM(M) + _FACVI*Abv, beta)*u.uas
+	T = T * u.K                   # Temperature of the star at t = tage [K]
+	R = (R * u.solRad).to(u.m)    # Radius of the star at t = tage [m]
 
-def piError(M, Abv, mu, beta=None):
-    '''
-        Error in parallax.
-        
-        Parameters
-        ----------
-        M : float
-            Stellar mass.
-        beta : float
-            Ecliptic latitude (rad)
-    '''
-    if(beta is None):
-        return parallaxError(_GfromM(M) + mu + _FACG*Abv, _VIfromM(M) + _FACVI*Abv)*u.uas
-    return parallaxError(_GfromM(M) + mu + _FACG*Abv, _VIfromM(M) + _FACVI*Abv, beta)*u.uas
+	logg = np.log10((const.G * M / R**2.).to(u.cm / u.s**2).value) # Log of surface gravity in cgs
+
+	Id = closest_spectrum(T.value, logg) # ID of the best-matching spectrum (chi-squared minimization)
+	Id = Id.squeeze() # Removes single-dimensional axes, essential for interpolating magnitudes
+
+	mu = 5.*np.log10(r.to(u.pc).value) - 5. # Distance modulus
+	Av = dust.query_dust(l.to(u.deg).value, b.to(u.deg).value, mu) * 2.682
+
+	#Interpolation: from Id, Av to magnitudes (not corrected for the distance!)
+
+	GMag0 = rbf_2_G(Id, Av) # Gaia G magnitude, [mag]
+	VMag0 = rbf_2_V(Id, Av) # Johnson-Cousins V magnitude, [mag]
+	IcMag0 = rbf_2_Ic(Id, Av) # Johnson-Cousins Ic magnitude, [mag]
+
+	dist_correction_Mag = (- 2.5 * np.log10(((R/r)**2.).to(1)).value # Distance correction for computing the unreddened flux at Earth, [mag]
+
+	#Magnitudes corrected for distance:
+	GMag = GMag0 + dist_correction_Mag # Gaia G magnitude, [mag]
+	VMag = VMag0 + dist_correction_Mag # Johnson-Cousins V magnitude, [mag]
+	IcMag = IcMag0 + dist_correction_Mag # Johnson-Cousins Ic magnitude, [mag]
+
+	V_I = VMag - IcMag # V - Ic colour, [mag]
+
+
+	# ============== Errors! ================== #
+    from pygaia.errors.astrometric import properMotionError
+    from pygaia.errors.astrometric import parallaxError
+	e_par = parallaxError(GMag, V_I, beta) * u.uas # Parallax error (PyGaia) [uas]
+	e_pmra, e_pmdec = properMotionError(GMag, V_I, beta) * u.uas / u.yr # ICRS proper motions error (PyGaia) [uas/yr]
+
+    GRVS = G_to_GRVS( GMag, V_I )
+
+    return e_par, e_pmra, e_pmdec, GRVS
