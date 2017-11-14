@@ -1,5 +1,5 @@
 '''
-    Compares the two sampling methods, one using an analytic form, one using a Montecarlo method. 
+    Compares the two sampling methods, one using an analytic form, one using a Montecarlo method.
 '''
 import numpy as np
 from hvs import HVSsample, Rossi2017, Contigiani2018
@@ -34,24 +34,3 @@ plt.gca().set_yscale('log')
 plt.gca().set_xlabel('M / Msun')
 plt.legend()
 plt.show()
-
-'''
-from fastkde import fastKDE
-
-myPDF, axes = fastKDE.pdf(sample1.m.to('Msun').value, sample1.v0.value)
-
-print sample1.m.to('Msun').value
-
-import pylab as PP
-
-
-#Extract the axes from the axis list
-v1,v2 = axes
-
-#Plot contours of the PDF should be a set of concentric ellipsoids centered on
-#(0.1, -300) Comparitively, the y axis range should be tiny and the x axis range
-#should be large
-PP.contour(v1,v2,np.log(myPDF))
-PP.gca().loglog()
-PP.show()
-'''

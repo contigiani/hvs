@@ -2,30 +2,32 @@
     Simple catalog
 '''
 import numpy as np
-from hvs import HVSsample, Rossi2017
+from hvs import HVSsample, Contigiani2018
 
 
 '''
     Create ejection catalog
 '''
 
-# Initialize an ejection model, in this case the default Rossi2017 with some minor customizations
-ejectionmodel = Rossi2017(name_modifier='TEST') # The name will appear in the final catalog
+# Initialize an ejection model, in this case the default Contigiani2018 with a minor namne customization
+ejectionmodel = Contigiani2018(name_modifier='TEST') # The name will appear in the final catalog
 print ejectionmodel._name
 
 # Print the allowed ranges of HVS mass and initial velocity for this model -- these variables can be changed
 print ejectionmodel.v_range
 print ejectionmodel.m_range
 
-# Create a sample of n HVSs by performing the MC described in Rossi+ 2017
-mysample = HVSsample(ejectionmodel, name='My test sample', n=1e6, verbose=True)
+# Create a sample of n HVSs
+mysample = HVSsample(ejectionmodel, name='My test sample', n=1e5, verbose=True)
 
 # Save it for later!
 mysample.save('myfirstcatalog.fits')
+
 '''
     Propagate it through the Galaxy
 '''
 
+print('Propagating...')
 
 # Take the default MW galactic potential
 
