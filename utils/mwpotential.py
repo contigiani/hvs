@@ -15,6 +15,8 @@ def MWPotential(Ms=0.76, rs=24.8, c=1.):
                 NFW profile scale mass in units of e12 Msun
             rs : float
                 Radial profile in units of kpc
+            c : float
+                Axis ratio
     '''
 
     # NFW profile
@@ -33,7 +35,7 @@ def MWPotential(Ms=0.76, rs=24.8, c=1.):
     #BH mass in 1e6 Msun
     Mbh = 4e6*u.Msun
 
-    halop = NFWPotential(amp=Ms, a=rs, c=c, normalize=False)
+    halop = TriaxialNFWPotential(amp=Ms, a=rs, c=c, normalize=False)
     diskp = MiyamotoNagaiPotential(amp=Md, a=ad, b=bd)
     bulgep = HernquistPotential(amp=2*Mb, a=Rb) #Factor 2 because of the galpy definition
     bh = KeplerPotential(amp=Mbh)
