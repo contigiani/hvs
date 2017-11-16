@@ -10,7 +10,7 @@ class HVSsample:
         - Generate a sample of HVS at ejection according to a specified ejection model
         - Propagate the ejection sample in the Galaxy
         - Perform the Gaia selection cut and computes the expected errorbars in the phase space observables
-        - #TODO Computes the sample likelihood of a given ejection model and galactic potential
+        - Computes the sample likelihood of a given ejection model and galactic potential
         - Save/Load resulting catalog as FITS file (astropy.table)
 
         See README for usage examples.
@@ -58,7 +58,7 @@ class HVSsample:
 
             propagate():
                 Propagates the sample in the Galaxy, changes cattype from 0 to 1
-            photmetry():
+            photometry():
                 Performs the Gaia selection cut, changes cattype from 1 to 2
             likelihood()
                 Checks the likelihood of the sample for a given potential&ejection model combination
@@ -204,49 +204,121 @@ class HVSsample:
             e_data.write('E_data.fits', overwrite=True)
 
 
-    def photometry(self, GRVScut=16., dustmap=None):
+    def photometry(self, dustmap=None, v=True):
         '''
-        Computes the Grvs-magnitudes and the Gaia errorbars, cuts the sample
-        forcing GRVS < GRVScut.
+        Computes the Grvs-magnitudes.
 
         Parameters
         ----------
-            GRVScut : float
-                GRVS cut to consider, it is 16 by default.
             dustmap : DustMap
                 Dustmap object to be used
+            v : bool
+                Computes total velocity in the Galactocentric restframe if True.
         '''
 
         from hvs.utils import DustMap
-        from hvs.utils.gaia import get_errors
+        from hvs.utils.gaia import get_GRVS
         from galpy.util.bovy_coords import radec_to_lb
 
         if(self.cattype < 1):
-            raise RuntimeError('The need needs to be propagated!')
+            raise RuntimeError('The catalog needs to be propagated!')
 
-        if(type(dustmap) is not Dustmap):
-            raise ValueError('You must provide an instance of the class Dustmap.')
+        if(not isinstance(dustmap, DustMap)):
+            raise ValueError('You must provide an instance of the class DustMap.')
 
-        if(hasattr(self, ll)):
-            self.e_par, self.e_pmra, self.e_pmdec, self.GRVS = get_errors(self.dist, self.ll*u.deg, self.bb*u.deg, self.m, self.tage, dustmap)
+        if(hasattr(self,'ll')):
+            self.GRVS = get_GRVS(self.dist.to('kpc').value, self.ll, self.bb, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
         else:
             data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
             l, b = data[:, 0], data[:, 1]
 
-            self.e_par, self.e_pmra, self.e_pmdec, self.GRVS = get_errors(self.dist, l*u.deg, b*u.deg, self.m, self.tage, dustmap)
+            self.GRVS = get_GRVS(self.dist.to('kpc').value, l, b, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
+
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos', 'e_ra', 'e_dec', 'e_pmra', 'e_pmdec', 'e_par', 'e_vlos', 'GRVS']
+                    'pmdec', 'dist', 'vlos',  'GRVS']
 
-        idx = self.GRVS < GRVScut
 
-        for name in namelist:
-            if(hasattr(self, name)):
-                var = getattr(self, name)
-                var = var[idx]
+        if(v):
+            import astropy.coordinates as coord
+            from galpy.util.bovy_coords import radec_to_lb
+
+            vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
+            vrot = [0., 220., 0.] * u.km / u.s
+            RSun = 8. * u.kpc
+            zSun = 0 * u.pc
+            v_sun = coord.CartesianDifferential(vSun + vrot)
+            GCCS = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
+
+            data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
+            ll, bb = data[:, 0], data[:, 1]
+
+            galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist)
+            galactocentric_coords = galactic_coords.transform_to(GCCS)
+            self.vtot = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
 
         self.cattype = 2
 
+
+    def scrambling(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
+        '''
+            Simulate N catalogs by randomizing the galactocentric right ascension and then
+            computes how many stars satisfy the photometric/dynamical conditions GRVS < GRVScut, vtot<vtotcut.
+            See Contigiani+ 2018 for more details.
+
+            Parameters
+            ----------
+                GRVScut : float
+                    Magnitude cut to impose
+                vtotcut : Quantity
+                    Galactocentric velocity cut to impose
+                dustmap : DustMap
+                    Dustmap to be used to compute the photometry
+                N : int
+                    Number of random realizations
+
+            Returns
+            -------
+                NGaia : ndarray
+                    Array of size N containing the number of selected stars per each realization.
+        '''
+        import astropy.coordinates as coord
+        from galpy.util.bovy_coords import radec_to_lb
+
+        vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
+        vrot = [0., 220., 0.] * u.km / u.s
+        RSun = 8. * u.kpc
+        zSun = 0 * u.pc
+        v_sun = coord.CartesianDifferential(vSun + vrot)
+        GCCS = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
+        GCS = coord.Galactic()
+
+
+        data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
+        ll, bb = data[:, 0], data[:, 1]
+
+        galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist)
+        galactocentric_coords = galactic_coords.transform_to(GCCS)
+
+        phi = np.arctan2(galactocentric_coords.y, galactocentric_coords.x)
+        r = (galactocentric_coords.y**2.+ galactocentric_coords.x**2.)**0.5
+        self.vtot = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
+        NGaia = np.zeros(N)
+
+        for i in xrange(N):
+            print i
+            phi2 = (2*np.random.random(phi.size)-1)*np.pi
+
+            galactocentric_coords2 = coord.Galactocentric(x= r*np.cos(phi2), y=r*np.sin(phi2), z=galactocentric_coords.z, galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
+
+            galactic2 = galactocentric_coords2.transform_to(GCS)
+            self.ll, self.bb = galactic2.l.to(u.deg).value, galactic2.b.to(u.deg).value
+
+            #self.photometry(dustmap=dustmap)
+
+            #NGaia[i] = ((self.GRVS<GRVScut) & (self.vtot > vtotcut)).sum()
+
+        return NGaia
 
     def precision_check(self, potential, dt=0.01*u.Myr, xi=0):
         '''
@@ -359,9 +431,6 @@ class HVSsample:
                 raise ValueError('Covariance matrix must have shape 6x6 or 7x7 (if error on mass is considered)')
 
 
-        #TODO sampling errorspace
-
-
         self.backwards_orbits = [None] * self.size
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
@@ -445,9 +514,9 @@ class HVSsample:
             # Gaia catalog
             datalist = [self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0, \
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
-                        self.dist, self.vlos, self.e_par, self._evlos, self.GRVS]
+                        self.dist, self.vlos, self.GRVS, self.vtot]
             namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', \
-                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'e_par', 'e_vlos', 'GRVS']
+                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'GRVS', 'vtot']
 
         data_table = Table(data=datalist, names=namelist, meta=meta_var)
         data_table.write(path, overwrite=True)
@@ -460,7 +529,7 @@ class HVSsample:
         from astropy.table import Table
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos', 'e_ra', 'e_dec', 'e_pmra', 'e_pmdec', 'e_par', 'e_vlos', 'GRVS']
+                    'pmdec', 'dist', 'vlos', 'e_ra', 'e_dec', 'e_pmra', 'e_pmdec', 'e_par', 'e_vlos', 'GRVS', 'vtot']
 
 
         data_table = Table.read(path)
