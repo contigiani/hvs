@@ -60,8 +60,10 @@ class HVSsample:
                 Propagates the sample in the Galaxy, changes cattype from 0 to 1
             photometry():
                 Performs the Gaia selection cut, changes cattype from 1 to 2
-            likelihood()
+            likelihood():
                 Checks the likelihood of the sample for a given potential&ejection model combination
+            scramble():
+                Scrambles the Galactocentric longitude of the sample to simulate N Gaia realizations
 
             save():
                 Saves the sample in a FITS file
@@ -163,8 +165,6 @@ class HVSsample:
 
         #Integration loop for the self.size orbits
         for i in xrange(self.size):
-            print(i)
-
             ts = np.linspace(0, 1, nsteps[i])*self.tflight[i]
 
             self.orbits[i] = Orbit(vxvv = [rho[i], vR[i], vT[i], z[i], vz[i], phi[i]], solarmotion=self.solarmotion)
@@ -206,7 +206,7 @@ class HVSsample:
 
     def photometry(self, dustmap=None, v=True):
         '''
-        Computes the Grvs-magnitudes.
+        Computes the Grvs-magnitudes and total velocity in Galactocentric restframe.
 
         Parameters
         ----------
@@ -241,7 +241,7 @@ class HVSsample:
 
         if(v):
             import astropy.coordinates as coord
-            from galpy.util.bovy_coords import radec_to_lb
+            from galpy.util.bovy_coords import radec_to_lb, pmrapmdec_to_pmllpmbb
 
             vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
             vrot = [0., 220., 0.] * u.km / u.s
@@ -252,15 +252,18 @@ class HVSsample:
 
             data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
             ll, bb = data[:, 0], data[:, 1]
+            data = pmrapmdec_to_pmllpmbb(self.pmra, self.pmdec, self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
+            pmll, pmbb = data[:, 0], data[:, 1]
 
-            galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist)
+            galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist, pm_l_cosb=pmll*u.mas/u.yr, pm_b=pmbb*u.mas/u.yr, radial_velocity=self.vlos)
             galactocentric_coords = galactic_coords.transform_to(GCCS)
+
             self.vtot = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
 
         self.cattype = 2
 
 
-    def scrambling(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
+    def scramble(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
         '''
             Simulate N catalogs by randomizing the galactocentric right ascension and then
             computes how many stars satisfy the photometric/dynamical conditions GRVS < GRVScut, vtot<vtotcut.
@@ -283,7 +286,7 @@ class HVSsample:
                     Array of size N containing the number of selected stars per each realization.
         '''
         import astropy.coordinates as coord
-        from galpy.util.bovy_coords import radec_to_lb
+        from galpy.util.bovy_coords import radec_to_lb, pmrapmdec_to_pmllpmbb
 
         vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
         vrot = [0., 220., 0.] * u.km / u.s
@@ -296,29 +299,36 @@ class HVSsample:
 
         data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
         ll, bb = data[:, 0], data[:, 1]
+        data = pmrapmdec_to_pmllpmbb(self.pmra, self.pmdec, self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
+        pmll, pmbb = data[:, 0], data[:, 1]
 
-        galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist)
+        galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist, pm_l_cosb=pmll*u.mas/u.yr, pm_b=pmbb*u.mas/u.yr, radial_velocity=self.vlos)
         galactocentric_coords = galactic_coords.transform_to(GCCS)
 
         phi = np.arctan2(galactocentric_coords.y, galactocentric_coords.x)
+
+
         r = (galactocentric_coords.y**2.+ galactocentric_coords.x**2.)**0.5
         self.vtot = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
         NGaia = np.zeros(N)
 
         for i in xrange(N):
-            print i
             phi2 = (2*np.random.random(phi.size)-1)*np.pi
 
             galactocentric_coords2 = coord.Galactocentric(x= r*np.cos(phi2), y=r*np.sin(phi2), z=galactocentric_coords.z, galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
 
             galactic2 = galactocentric_coords2.transform_to(GCS)
             self.ll, self.bb = galactic2.l.to(u.deg).value, galactic2.b.to(u.deg).value
+            self.dist = galactic2.distance
 
-            #self.photometry(dustmap=dustmap)
+            self.photometry(dustmap=dustmap, v=False)
 
-            #NGaia[i] = ((self.GRVS<GRVScut) & (self.vtot > vtotcut)).sum()
+            NGaia[i] = ((self.GRVS<GRVScut) & (self.vtot > vtotcut)).sum()
+
+        self.cattype = 2
 
         return NGaia
+
 
     def precision_check(self, potential, dt=0.01*u.Myr, xi=0):
         '''
@@ -331,7 +341,7 @@ class HVSsample:
         potential : galpy potential
             Potential to integrate the orbits with.
         xi : float or array
-            Assumed metallicity for stellar lifetime
+            Assumed metallicity for stellar lifetime.
 
 
         Returns
@@ -379,7 +389,7 @@ class HVSsample:
 
 
 
-    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, n_samples=1, weights=None):
+    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, weights=None):
         '''
         Computes the non-normalized log-likelihood of a given potential and ejection model for a given potential.
         When comparing different ejection models or biased samples, make sure you renormalize the likelihood
@@ -390,13 +400,11 @@ class HVSsample:
         Parameters
         ----------
         potential : galpy potential
-            Potential to integrate the orbits with.
-        ejmodel : EjectionModel object
+            Potential to be tested and to integrate the orbits with.
+        ejmodel : EjectionModel
             Ejectionmodel to be tested.
         individual : bool
             If True the method returns individual likelihoods. The default value is False.
-        n_samples : int
-            Number of point to sample for the errorbars
         weights : iterable
             List or array containing the weights for the log-likelihoods of the different stars.
         xi : float or array
@@ -413,9 +421,6 @@ class HVSsample:
         '''
         from galpy.orbit import Orbit
 
-        n_samples = np.array(n_samples)
-        weights = np.array(weights)
-
 
         if(self.cattype == 0):
             raise ValueError("The likelihood can be computed only for a propagated sample.")
@@ -426,11 +431,7 @@ class HVSsample:
         if((weights is not None) and (weights.size != self.size)):
             raise ValueError('The length of weights must be equal to the number of HVS in the sample.')
 
-        if(cov is not None):
-            if((cov.shape is not (7,7)) or (cov.shape is not (6,6))):
-                raise ValueError('Covariance matrix must have shape 6x6 or 7x7 (if error on mass is considered)')
-
-
+        weights = np.array(weights)
         self.backwards_orbits = [None] * self.size
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
@@ -443,7 +444,6 @@ class HVSsample:
 
 
         import astropy.coordinates as coord
-        from gala.coordinates import vhel_to_gal
 
 
         vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
@@ -471,9 +471,9 @@ class HVSsample:
 
             galactic = coord.Galactic(l=ll, b=bb, distance=dist, pm_l_cosb=pmll, pm_b=pmbb, radial_velocity=vlos)
             gal = galactic.transform_to(gc)
-            vtot = np.sqrt(gal.v_x**2. + gal.v_y**2. + gal.v_z**2.).to(u.km/u.s)
-            r = np.sqrt(gal.x**2. + gal.y**2. + gal.z**2.).to(u.kpc)
-            self.lnlike[i] = np.log((ejmodel.R(self.m, vtot, rtot) * ejmodel.g(np.linspace(0, 1, nsteps[i]))).sum())
+            vx, vy, vz = gal.v_x, gal.v_y, gal.v_z
+            x, y, z = gal.x, gal.y, gal.z
+            self.lnlike[i] = np.log( ( ejmodel.R(self.m[i], vx, vy, vz, x, y, z) * ejmodel.g( np.linspace(0, 1, nsteps[i]) ) ).sum() )
 
         if(individual):
             return self.lnlike

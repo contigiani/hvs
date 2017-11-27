@@ -291,8 +291,8 @@ class Contigiani2018(EjectionModel):
             Allowed range of HVS masses
         T_MW : Quantity
             Milky Way lifetime
-        M_BH : Quantity
-            Mass of the BH at the GC
+        Lmax : Quantity
+            Maximum specific angular momentum allowed (i.e. L < Lmax implies L \sim 0)
 
 
         Methods
@@ -300,12 +300,12 @@ class Contigiani2018(EjectionModel):
         g :
             Hypervelocity star survival function as a function of the flight time expressed as a lifetime fraction
         R :
-            Ejection density distribution, function of mass, total velocity, distance from GC
+            Ejection density distribution, function of mass, velocity, distance w.r.t. GC
     '''
     v_range = [450, 5000]*u.km/u.s
     m_range = [0.5, 9]*u.Msun
     T_MW = 13.8*u.Gyr # MW maximum lifetime from Planck2015
-    M_BH = 4e6*u.Msun # Black hole mass
+    Lmax = 10*u.pc*u.km/u.s
 
     def __init__(self, name_modifier = None, vm_params = [1530*u.km/u.s, -0.65, -1.7, -6.3, -1], \
                     r_params = [3*u.pc, 100*u.pc, 4]):
@@ -350,7 +350,7 @@ class Contigiani2018(EjectionModel):
         return result
 
 
-    def R(self, m, v, r):
+    def R(self, m, vx, vy, vz, x, y, z):
         '''
             Ejection rate distribution for likelihood
 
@@ -358,33 +358,34 @@ class Contigiani2018(EjectionModel):
             ----------
                 m : Quantity
                     HVS stellar mass
-                v : Quantity
-                    HVS velocity at ejection point
-                r : Quantity
-                    Distance of the ejection point from the GC
+                vx, vy, vz : Quantity
+                    HVS velocity at ejection point in Galactocentric Cartesian coords
+                x, y, z : Quantity
+                    HVS position in Galactocentric Cartesian coords
         '''
 
-        m, v, r = u.Quantity(m, ndmin=1), u.Quantity(v, ndmin=1), u.Quantity(r, ndmin=1)
+        r = np.sqrt(x**2. + y**2. + z**2.)
+        v = np.sqrt(vx**2. + vy**2. + vz**2.)
+        L = np.sqrt((y*vz - z*vy)**2. + (x*vz-z*vx)**2. + (x*vy-y*vx)**2.)
 
-        size = r.size
         r = ((r - self.centralr)/self.sigmar).to(1).value # normalized r
 
 
-        if(m.shape != v.shape):
-            m =  m*np.ones(v.shape)
+        if(m.size == 1):
+            m =  m*np.ones(vx.shape)
 
-        if(v.shape != r.shape):
+        if(vx.shape != x.shape):
             raise ValueError('The input Quantities must have the same shape.')
 
-        #Boundaries of the space:
+        #Boundaries:
         idx = (v >= self.v_range[0]) & (v <= self.v_range[1]) & (m >= self.m_range[0]) \
-                & (m <= self.m_range[1]) & (r < self.Nsigma) & (r>=0)
+                & (m <= self.m_range[1]) & (r < self.Nsigma) & (r>=0) & (L <self.Lmax)
 
         result = np.full(r.shape, np.nan)
         result[~idx] = 0
 
         # Mass-velocity component
-        v0 = np.full(r.shape, -np.inf)*u.km/u.s
+        v0 = np.full(r.shape, 0)*u.km/u.s
         v0[idx] = np.power((m[idx]/u.Msun).to('1').value, self.b)*self.a
 
         idx1 = idx & (v >= v0)
@@ -399,7 +400,7 @@ class Contigiani2018(EjectionModel):
 
     def _lnprobmv(self, data):
         '''
-            Log probability in mass - ejection velocity space. Simply invokes self.R() on a constant r
+            Log probability in mass - ejection velocity space
 
             Parameters
             ----------
@@ -435,7 +436,7 @@ class Contigiani2018(EjectionModel):
         '''
             Samples from the ejection distribution to generate an ejection sample.
             The distribution in mass and velocity space is sampled from the power-law fit from
-            Contigiani+ 2018. I
+            Contigiani+ 2018.
 
             The velocity vector is assumed radial.
 

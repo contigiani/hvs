@@ -41,7 +41,7 @@ def concatenate_fits(mycat, mydir):
     '''
     import glob
 
-    a = glob.glob(mydir+'/*_p.fits')
+    a = glob.glob(mydir+'/*.fits')
 
     data = Table.read(a[0])
 

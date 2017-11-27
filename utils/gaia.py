@@ -75,11 +75,6 @@ def get_errors(r, l, b, M, age, dust):
     '''
     r, l, b, M, age = r*u.kpc, l*u.deg, b*u.deg, M*u.Msun, age*u.Myr
 
-    #Ecliptic latitude from Jordi+ 2010,  Eq. 7
-    beta = np.arcsin(abs(0.4971*np.sin(b) + 0.8677*np.cos(b)*np.sin(l - 6.38*u.deg))).to('rad').value
-    if np.isnan(beta) == True:
-        beta = -np.pi/2.
-
     T, R = hse.get_TempRad( M.to(u.solMass).value, 0, age.to(u.Myr).value) # Temperature [K], radius [solRad]
 
     T = T * u.K                   # Temperature of the star at t = tage [K]
@@ -92,6 +87,7 @@ def get_errors(r, l, b, M, age, dust):
 
     mu = 5.*np.log10(r.to(u.pc).value) - 5. # Distance modulus
     Av = dust.query_dust(l.to(u.deg).value, b.to(u.deg).value, mu) * 2.682
+
 
     #Interpolation: from Id, Av to magnitudes (not corrected for the distance!)
 
@@ -116,7 +112,7 @@ def get_errors(r, l, b, M, age, dust):
     e_par = parallaxError(GMag, V_I, beta) * u.uas # Parallax error (PyGaia) [uas]
     e_pmra, e_pmdec = properMotionError(GMag, V_I, beta) * u.uas / u.yr # ICRS proper motions error (PyGaia) [uas/yr]
     '''
-    
+
     GRVS = G_to_GRVS( GMag, V_I )
 
     return GRVS

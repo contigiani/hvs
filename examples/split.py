@@ -1,4 +1,5 @@
-from hvs.utils import split_fits, MWPotential, concatenate_fits
+from hvs.utils import split_fits, concatenate_fits
+from hvs.utils.mwpotential import MWPotential
 from hvs import HVSsample
 import shutil
 import os
@@ -13,15 +14,15 @@ def propagate_function(i):
     mysample.propagate(default_potential)
     mysample.save('myfirstdir/'+str(i)+'.fits')
 
-# Propagate every catalog individually (this can be parallelized easily, just run this for loop on multiple 
+# Propagate every catalog individually (this can be parallelized easily, just run this for loop on multiple
 # machines/python instances)
 for i in xrange(10):
     # The files
     if(os.path.isfile('myfirstdir/.'+str(i))):
-        continue  
+        continue
     open('myfirstdir/.'+str(i), 'wa').close()
     propagate_function(i)
-    
+
 # Concatenate the catalog
 concatenate_fits("myfirstcatalog_propagated.fits", "myfirstdir") # Rewrites everything in myfirstcatalog.fits
 shutil.rmtree("myfirstdir/")
