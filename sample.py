@@ -389,13 +389,13 @@ class HVSsample:
 
 
 
-    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, weights=None):
+    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, weights=None, cut=None, vtotcut=450*u.km/u.s, GRVScut=16.):
         '''
-        Computes the non-normalized log-likelihood of a given potential and ejection model for a given potential.
+        Computes the non-normalized ln-likelihood of a given potential and ejection model for a given potential.
         When comparing different ejection models or biased samples, make sure you renormalize the likelihood
         accordingly. See Contigiani+ 2018.
 
-        Can return the log-likelihoods of individual stars if individual is set to True.
+        Can return the ln-likelihoods of individual stars if individual is set to True.
 
         Parameters
         ----------
@@ -406,32 +406,56 @@ class HVSsample:
         individual : bool
             If True the method returns individual likelihoods. The default value is False.
         weights : iterable
-            List or array containing the weights for the log-likelihoods of the different stars.
+            List or array containing the weights for the ln-likelihoods of the different stars.
         xi : float or array
             Assumed metallicity for stellar lifetime
-
+        cut : str
+            Specify the cut to be performed before calculating the likelihood.
+            Supported values include an integer variable (N), an array (a) and the string "Gaia".
+            The first one picks N random stars, the second one picks the indices contained in a
+            and the third one picks according to vtotcut and GRVScut.
+        vtotcut, GRVScut : Quantity, float
+            See above.
 
         Returns
         -------
 
         log likelihood values : numpy.array or float
-            Returns the log-likelihood of the entire sample or the log-likelihood for every single star if individual
+            Returns the ln-likelihood of the entire sample or the log-likelihood for every single star if individual
             is True.
 
         '''
         from galpy.orbit import Orbit
 
-
         if(self.cattype == 0):
             raise ValueError("The likelihood can be computed only for a propagated sample.")
 
+        namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
+                    'pmdec', 'dist', 'vlos', 'GRVS', 'vtot']
+
+
+
+        if(cut == 'Gaia'):
+                idx = (self.vtot > vtotcut) & (self.GRVS<GRVScut)
+                for varname in namelist:
+                    setattr(self, varname, getattr(self, varname)[idx])
+                self.size = idx.sum()
+        if(type(cut) is int):
+                idx_e = np.random.choice(np.arange(int(self.size)), cut, replace=False)
+                for varname in namelist:
+                    setattr(self, varname, getattr(self, varname)[idx_e])
+                self.size = cut
+        if(type(cut) is np.ndarray):
+                for varname in namelist:
+                    setattr(self, varname, getattr(self, varname)[cut])
+                self.size = cut.size
         if(self.size > 1e3):
             print("You are computing the likelihood of a large sample. This might take a while.")
 
-        if((weights is not None) and (weights.size != self.size)):
+        weights = np.array(weights)
+        if((weights != None) and (weights.size != self.size)):
             raise ValueError('The length of weights must be equal to the number of HVS in the sample.')
 
-        weights = np.array(weights)
         self.backwards_orbits = [None] * self.size
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
@@ -455,6 +479,7 @@ class HVSsample:
         v_sun = coord.CartesianDifferential(vSun + vrot)
         gc = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
 
+        from time import time
         for i in xrange(self.size):
             ts = np.linspace(0, 1, nsteps[i])*lifetime[i]
             self.backwards_orbits[i] = Orbit(vxvv = [self.ra[i], self.dec[i], self.dist[i], \
@@ -474,10 +499,11 @@ class HVSsample:
             vx, vy, vz = gal.v_x, gal.v_y, gal.v_z
             x, y, z = gal.x, gal.y, gal.z
             self.lnlike[i] = np.log( ( ejmodel.R(self.m[i], vx, vy, vz, x, y, z) * ejmodel.g( np.linspace(0, 1, nsteps[i]) ) ).sum() )
-
+            if(self.lnlike[i] == -np.inf):
+                break
         if(individual):
             return self.lnlike
-        return self.lnlikes.sum()
+        return self.lnlike.sum()
 
 
     def save(self, path):
@@ -529,7 +555,7 @@ class HVSsample:
         from astropy.table import Table
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos', 'e_ra', 'e_dec', 'e_pmra', 'e_pmdec', 'e_par', 'e_vlos', 'GRVS', 'vtot']
+                    'pmdec', 'dist', 'vlos', 'GRVS', 'vtot']
 
 
         data_table = Table.read(path)
