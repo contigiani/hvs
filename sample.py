@@ -435,16 +435,25 @@ class HVSsample:
         if(cut == 'Gaia'):
                 idx = (self.vtot > vtotcut) & (self.GRVS<GRVScut)
                 for varname in namelist:
-                    setattr(self, varname, getattr(self, varname)[idx])
+                    try:
+                        setattr(self, varname, getattr(self, varname)[idx])
+                    except:
+                        pass
                 self.size = idx.sum()
         if(type(cut) is int):
                 idx_e = np.random.choice(np.arange(int(self.size)), cut, replace=False)
                 for varname in namelist:
-                    setattr(self, varname, getattr(self, varname)[idx_e])
+                    try:
+                        setattr(self, varname, getattr(self, varname)[idx_e])
+                    except:
+                        pass
                 self.size = cut
         if(type(cut) is np.ndarray):
                 for varname in namelist:
-                    setattr(self, varname, getattr(self, varname)[cut])
+                    try:
+                        setattr(self, varname, getattr(self, varname)[cut])
+                    except:
+                        pass
                 self.size = cut.size
         if(self.size > 1e3):
             print("You are computing the likelihood of a large sample. This might take a while.")
