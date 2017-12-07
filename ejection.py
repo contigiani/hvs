@@ -305,7 +305,7 @@ class Contigiani2018(EjectionModel):
     v_range = [450, 5000]*u.km/u.s
     m_range = [0.5, 9]*u.Msun
     T_MW = 13.8*u.Gyr # MW maximum lifetime from Planck2015
-    Lmax = 10*u.pc*u.km/u.s
+    Lmax = 100*u.pc*u.km/u.s
 
     def __init__(self, name_modifier = None, vm_params = [1530*u.km/u.s, -0.65, -1.7, -6.3, -1], \
                     r_params = [3*u.pc, 100*u.pc, 4]):
@@ -393,7 +393,6 @@ class Contigiani2018(EjectionModel):
 
         result[idx1] = np.power(m[idx1], self.c) * np.power(v[idx1]/v0[idx1], self.d) * np.exp(-np.power(r[idx1], 2.)/2.)
         result[idx2] = np.power(m[idx2], self.c) * np.power(v[idx2]/v0[idx2], self.e) * np.exp(-np.power(r[idx2], 2.)/2.)
-
 
         return result
 
