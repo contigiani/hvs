@@ -227,16 +227,13 @@ class HVSsample:
             raise ValueError('You must provide an instance of the class DustMap.')
 
         if(hasattr(self,'ll')):
-            self.GRVS = get_GRVS(self.dist.to('kpc').value, self.ll, self.bb, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
+            self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.pmdec = get_GRVS(self.dist.to('kpc').value, self.ll, self.bb, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
         else:
             data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
             l, b = data[:, 0], data[:, 1]
 
-            self.GRVS = get_GRVS(self.dist.to('kpc').value, l, b, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
+            self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.pmdec = get_GRVS(self.dist.to('kpc').value, l, b, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
 
-
-        namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos',  'GRVS']
 
 
         if(v):
@@ -431,7 +428,7 @@ class HVSsample:
             raise ValueError("The likelihood can be computed only for a propagated sample.")
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos', 'GRVS', 'vtot']
+                    'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
 
 
 
@@ -542,7 +539,7 @@ class HVSsample:
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
                         self.dist, self.vlos, self.GRVS, self.vtot]
             namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', \
-                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'GRVS', 'vtot']
+                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
 
         data_table = Table(data=datalist, names=namelist, meta=meta_var)
         data_table.write(path, overwrite=True)
@@ -555,7 +552,7 @@ class HVSsample:
         from astropy.table import Table
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos', 'GRVS', 'vtot']
+                    'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
 
 
         data_table = Table.read(path)

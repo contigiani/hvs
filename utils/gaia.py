@@ -104,17 +104,15 @@ def get_errors(r, l, b, M, age, dust):
 
     V_I = VMag - IcMag # V - Ic colour, [mag]
 
-    '''
     # ============== Errors! ================== #
     from pygaia.errors.astrometric import properMotionError
     from pygaia.errors.astrometric import parallaxError
 
     e_par = parallaxError(GMag, V_I, beta) * u.uas # Parallax error (PyGaia) [uas]
     e_pmra, e_pmdec = properMotionError(GMag, V_I, beta) * u.uas / u.yr # ICRS proper motions error (PyGaia) [uas/yr]
-    '''
 
     GRVS = G_to_GRVS( GMag, V_I )
 
-    return GRVS
+    return GRVS, V, G, e_par, e_pmra, e_pmdec
 
 get_GRVS = np.vectorize(get_errors)
