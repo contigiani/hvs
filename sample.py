@@ -212,8 +212,6 @@ class HVSsample:
         ----------
             dustmap : DustMap
                 Dustmap object to be used
-            v : bool
-                Computes total velocity in the Galactocentric restframe if True.
         '''
 
         from hvs.utils import DustMap
@@ -259,9 +257,6 @@ class HVSsample:
 
         self.cattype = 2
 
-
-
-    def
 
     def shuffle(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
         '''
@@ -389,7 +384,7 @@ class HVSsample:
 
     def subsample(self, cut=None, vtotcut=450*u.km/u.s, GRVScut=16.):
         '''
-        Cuts the sample based on the value of cut.
+        Restrict the sample based on the value of cut.
 
         Parameters
         ----------
@@ -551,7 +546,7 @@ class HVSsample:
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
                         self.dist, self.vlos]
             namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', \
-                        'dec', 'pmra', 'pmdec', 'dist', 'vlos']
+                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'vtot']
 
         if(self.cattype == 2):
             # Gaia catalog
@@ -567,7 +562,7 @@ class HVSsample:
 
     def _load(self, path):
         '''
-            Loads an HVS sample from a fits table
+            Loads a HVS sample from a fits table
         '''
         from astropy.table import Table
 
@@ -595,6 +590,7 @@ class HVSsample:
         if('cattype' not in data_table.meta):
             raise ValueError('Loaded fits table must contain the cattype metavariable!')
             return False
+
         self.cattype = data_table.meta['cattype']
 
         self.size = len(data_table)
