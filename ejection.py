@@ -11,7 +11,7 @@ class EjectionModel:
     _name = 'Unknown'
 
     def __init__(self, name):
-        self.name = name
+        self._name = name
 
     def g(self, r):
         '''
@@ -35,11 +35,12 @@ class EjectionModel:
 
 class Rossi2017(EjectionModel):
     '''
-        HVS ejection model from Rossi+ 2017. Isotropic ejection from the GC, smooth Gaussian in
-        the radial direction and with powerlaw mass/velocity distribution. Can generate an ejection sample using a
-        Monte Carlo approach based on inverse transform sampling.
+        HVS ejection model from Rossi+ 2017. Isotropic ejection from 3 pc from GC and with a mass/velocity distribution based on MC.
+        Can generate an ejection sample using a Monte Carlo approach based on inverse transform sampling.
 
         Cannot be used to fit data, because it lacks an analytic form for the ejection distribution rate.
+
+        See also Marchetti+ 2017.
 
         Attributes
         ---------
@@ -71,8 +72,9 @@ class Rossi2017(EjectionModel):
 
     alpha = -1.
     gamma = -3.5
+    centralr = 3*u.pc
 
-    def __init__(self, name_modifier = None, r_params = [3*u.pc, 100*u.pc, 4]):
+    def __init__(self, name_modifier = None):
         '''
         Parameters
         ----------
@@ -86,8 +88,6 @@ class Rossi2017(EjectionModel):
             self._name = 'Rossi 2017 - ' + name_modifier
         else:
             self._name = 'Rossi 2017'
-
-        self.centralr, self.sigmar, self.Nsigma = r_params
 
     def g(self, r):
         '''
@@ -253,8 +253,8 @@ class Rossi2017(EjectionModel):
         m, v = M_HVS[idx], v[idx]
 
 
-        # Distance from GC normally distributed
-        r0 = np.abs(np.random.normal(0, 1, n))*self.sigmar+self.centralr
+        # Distance from GC at 3 pc
+        r0 = np.ones(n)*self.centralr
 
         # Isotropic position unit vector in spherical coordinates
         phi0 = np.random.uniform(0,2*PI, n)*u.rad
@@ -278,8 +278,8 @@ class Rossi2017(EjectionModel):
 
 class Contigiani2018(EjectionModel):
     '''
-        HVS ejection model from Contigiani+ 2018. Isotropic ejection from the GC, smooth Gaussian in
-        the radial direction and with powerlaw for mass&velocity distribution.
+        HVS ejection model from Contigiani+ 2018. Isotropic ejection from 3pc from the GC
+        and with powerlaw for mass&velocity distribution.
 
         Attributes
         ---------
@@ -291,9 +291,10 @@ class Contigiani2018(EjectionModel):
             Allowed range of HVS masses
         T_MW : Quantity
             Milky Way lifetime
-        Lmax : Quantity
-            Maximum specific angular momentum allowed (i.e. L < Lmax implies L \sim 0)
-
+        sigmaL : Quantity
+            Numerical smoothing of the zero angular momentum condition when fitting
+        sigmar : Quantity
+            Numerical smoothing of the r=3pc condition when fitting
 
         Methods
         -------
@@ -301,14 +302,14 @@ class Contigiani2018(EjectionModel):
             Hypervelocity star survival function as a function of the flight time expressed as a lifetime fraction
         R :
             Ejection density distribution, function of mass, velocity, distance w.r.t. GC
+        sampler :
+            Generate an ejection sample
     '''
     v_range = [450, 5000]*u.km/u.s
     m_range = [0.5, 9]*u.Msun
     T_MW = 13.8*u.Gyr # MW maximum lifetime from Planck2015
-    Lmax = 100*u.pc*u.km/u.s
 
-    def __init__(self, name_modifier = None, vm_params = [1530*u.km/u.s, -0.65, -1.7, -6.3, -1], \
-                    r_params = [3*u.pc, 100*u.pc, 4]):
+    def __init__(self, name_modifier = None, vm_params = [1530*u.km/u.s, -0.65, -1.7, -6.3, -1]):
         '''
         Parameters
         ----------
@@ -317,9 +318,6 @@ class Contigiani2018(EjectionModel):
         vm_params : list
             Parameters of the velocity/mass ejection distribution component. These are the parameters a, b, c, d, e
             in Contigiani+ 2018
-        r_params : list
-            Parameters of the radial ejection distribution component. In order: mean value, standard deviation, max
-            number of sigmas, see Contigiani+ 2018
         '''
         if(name_modifier is not None):
             self._name = 'Contigiani 2018 - ' + name_modifier
@@ -328,7 +326,11 @@ class Contigiani2018(EjectionModel):
 
 
         self.a, self.b, self.c, self.d, self.e = vm_params
-        self.centralr, self.sigmar, self.Nsigma = r_params
+
+        self.centralr = 3*u.pc
+        self.sigmar = 10*u.pc
+        self.sigmaL = 10*u.pc*u.km/u.s
+        self.Nsigma = 4
 
     def g(self, r):
         '''
@@ -369,6 +371,7 @@ class Contigiani2018(EjectionModel):
         L = np.sqrt((y*vz - z*vy)**2. + (x*vz-z*vx)**2. + (x*vy-y*vx)**2.)
 
         r = ((r - self.centralr)/self.sigmar).to(1).value # normalized r
+        L = (L/self.sigmaL).to(1).value # normalized L
 
 
         if(m.size == 1):
@@ -379,8 +382,7 @@ class Contigiani2018(EjectionModel):
 
         #Boundaries:
         idx = (v >= self.v_range[0]) & (v <= self.v_range[1]) & (m >= self.m_range[0]) \
-                & (m <= self.m_range[1]) & (r < self.Nsigma) & (r>=0) & (L <self.Lmax)
-
+                & (m <= self.m_range[1]) & (r < self.Nsigma) & (r>=0) & (L <self.Nsigma)
         result = np.full(r.shape, np.nan)
         result[~idx] = 0
 
@@ -391,8 +393,8 @@ class Contigiani2018(EjectionModel):
         idx1 = idx & (v >= v0)
         idx2 = idx & (v < v0)
 
-        result[idx1] = np.power(m[idx1], self.c) * np.power(v[idx1]/v0[idx1], self.d) * np.exp(-np.power(r[idx1], 2.)/2.)
-        result[idx2] = np.power(m[idx2], self.c) * np.power(v[idx2]/v0[idx2], self.e) * np.exp(-np.power(r[idx2], 2.)/2.)
+        result[idx1] = np.power(m[idx1], self.c) * np.power(v[idx1]/v0[idx1], self.d) * np.exp(-np.power(r[idx1], 2.)/2.) * np.exp(-np.power(L[idx1], 2.)/2.)
+        result[idx2] = np.power(m[idx2], self.c) * np.power(v[idx2]/v0[idx2], self.e) * np.exp(-np.power(r[idx2], 2.)/2.) * np.exp(-np.power(L[idx2], 2.)/2.)
 
         return result
 
@@ -506,16 +508,15 @@ class Contigiani2018(EjectionModel):
         m, v = sampler.flatchain[:,0]*u.Msun, sampler.flatchain[:,1]*u.km/u.s
 
         # Distance from GC normally distributed
-        r0 = np.abs(np.random.normal(0, 1, n))*self.sigmar+self.centralr
+        r0 = np.ones(n)*self.centralr
 
         # Isotropic position unit vector in spherical coordinates
         phi0 = np.random.uniform(0,2*PI, n)*u.rad
         theta0 = np.arccos( np.random.uniform(-1,1, n))*u.rad
 
-        # The velocity vector points radially.
-        phiv0 = np.zeros(n)*u.rad#np.random.uniform(-PI/2,PI/2, n)*u.rad
-        thetav0 = theta0 #np.arccos( np.random.uniform(-1,1, n))*u.rad
-
+        # The velocity vector points radially
+        phiv0 = np.zeros(n)*u.rad
+        thetav0 = theta0
 
         # Age and flight time
         T_max = t_MS(m, xi)

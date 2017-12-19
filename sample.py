@@ -232,7 +232,7 @@ class HVSsample:
             data = radec_to_lb(self.ra.to('deg').value, self.dec.to('deg').value, degree=True)
             l, b = data[:, 0], data[:, 1]
 
-            self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.pmdec = get_GRVS(self.dist.to('kpc').value, l, b, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
+            self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.e_pmdec = get_GRVS(self.dist.to('kpc').value, l, b, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
 
 
 
@@ -260,11 +260,13 @@ class HVSsample:
         self.cattype = 2
 
 
-    def scramble(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
+
+    def
+
+    def shuffle(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
         '''
-            Simulate N catalogs by randomizing the galactocentric right ascension and then
-            computes how many stars satisfy the photometric/dynamical conditions GRVS < GRVScut, vtot<vtotcut.
-            See Contigiani+ 2018 for more details.
+            Randomize the galactocentric right ascension and
+            computes how many stars satisfy the photometric/dynamical conditions GRVS < GRVScut, vtot<vtotcut. Do this N times.
 
             Parameters
             ----------
@@ -344,8 +346,8 @@ class HVSsample:
         Returns
         -------
 
-        angular momentum values : numpy.array or float
-            Returns the angular momentum of the orbits at a time tflight.
+        vr, vtheta : numpy.array or float
+            velocity in the radial direction (parallel to the position vector) and in the theta (perpendicular to it)
 
         '''
         from galpy.orbit import Orbit
@@ -381,51 +383,25 @@ class HVSsample:
         R = R/norm
         z = z/norm
 
-        # returns the velocity in the radial direction vs polar direction
+        # returns the velocity in the spherically radial direction and polar direction
         return np.abs(vR*z -vz*R), np.abs(vR*R +vz*z)
 
 
-
-    def likelihood(self, potential, ejmodel, dt=0.01*u.Myr, xi = 0, individual=False, weights=None, cut=None, vtotcut=450*u.km/u.s, GRVScut=16.):
+    def subsample(self, cut=None, vtotcut=450*u.km/u.s, GRVScut=16.):
         '''
-        Computes the non-normalized ln-likelihood of a given potential and ejection model for a given potential.
-        When comparing different ejection models or biased samples, make sure you renormalize the likelihood
-        accordingly. See Contigiani+ 2018.
-
-        Can return the ln-likelihoods of individual stars if individual is set to True.
+        Cuts the sample based on the value of cut.
 
         Parameters
         ----------
-        potential : galpy potential
-            Potential to be tested and to integrate the orbits with.
-        ejmodel : EjectionModel
-            Ejectionmodel to be tested.
-        individual : bool
-            If True the method returns individual likelihoods. The default value is False.
-        weights : iterable
-            List or array containing the weights for the ln-likelihoods of the different stars.
-        xi : float or array
-            Assumed metallicity for stellar lifetime
-        cut : str
-            Specify the cut to be performed before calculating the likelihood.
-            Supported values include an integer variable (N), an array (a) and the string "Gaia".
-            The first one picks N random stars, the second one picks the indices contained in a
-            and the third one picks according to vtotcut and GRVScut.
-        vtotcut, GRVScut : Quantity, float
-            See above.
-
-        Returns
-        -------
-
-        log likelihood values : numpy.array or float
-            Returns the ln-likelihood of the entire sample or the log-likelihood for every single star if individual
-            is True.
-
+            cut : str or np.array or int
+                If 'Gaia' the sample is cut according to GRVScut and vtot,
+                If np.array, the indices corresponding to cut are selected,
+                If int, cut number of points are selected.
+            vtotcut : Quantity
+                Total galactocentric velocity cut to satisfy if cut=='Gaia'
+            GRVScut : float
+                Cut in magnitude to satisfy if cut=='Gaia'
         '''
-        from galpy.orbit import Orbit
-
-        if(self.cattype == 0):
-            raise ValueError("The likelihood can be computed only for a propagated sample.")
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
                     'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
@@ -455,6 +431,44 @@ class HVSsample:
                     except:
                         pass
                 self.size = cut.size
+
+
+    def likelihood(self, potential, ejmodel, dt=0.005*u.Myr, xi = 0, individual=False, weights=None):
+        '''
+        Computes the non-normalized ln-likelihood of a given potential and ejection model for a given potential.
+        When comparing different ejection models or biased samples, make sure you renormalize the likelihood
+        accordingly. See Contigiani+ 2018.
+
+        Can return the ln-likelihoods of individual stars if individual is set to True.
+
+        Parameters
+        ----------
+        potential : galpy potential
+            Potential to be tested and to integrate the orbits with.
+        ejmodel : EjectionModel
+            Ejectionmodel to be tested.
+        individual : bool
+            If True the method returns individual likelihoods. The default value is False.
+        weights : iterable
+            List or array containing the weights for the ln-likelihoods of the different stars.
+        xi : float or array
+            Assumed metallicity for stellar lifetime
+
+        Returns
+        -------
+
+        log likelihood values : numpy.array or float
+            Returns the ln-likelihood of the entire sample or the log-likelihood for every single star if individual
+            is True.
+
+        '''
+        from galpy.orbit import Orbit
+        import astropy.coordinates as coord
+        from hvs.utils import t_MS
+
+        if(self.cattype == 0):
+            raise ValueError("The likelihood can be computed only for a propagated sample.")
+
         if(self.size > 1e3):
             print("You are computing the likelihood of a large sample. This might take a while.")
 
@@ -466,26 +480,21 @@ class HVSsample:
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
 
-        from hvs.utils import t_MS
         lifetime = t_MS(self.m, xi)
         lifetime[lifetime>self.T_MW] = self.T_MW
         nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
         nsteps[nsteps<100] = 100
 
 
-        import astropy.coordinates as coord
-
-
         vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
         vrot = [0., 220., 0.] * u.km / u.s
 
         RSun = 8. * u.kpc
-        zSun = 0 * u.pc
+        zSun = 0.025 * u.kpc
 
-        v_sun = coord.CartesianDifferential(vSun + vrot)
+        v_sun = coord.CartesianDifferential(vrot+vSun)
         gc = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
 
-        from time import time
         for i in xrange(self.size):
             ts = np.linspace(0, 1, nsteps[i])*lifetime[i]
             self.backwards_orbits[i] = Orbit(vxvv = [self.ra[i], self.dec[i], self.dist[i], \
@@ -504,9 +513,11 @@ class HVSsample:
             gal = galactic.transform_to(gc)
             vx, vy, vz = gal.v_x, gal.v_y, gal.v_z
             x, y, z = gal.x, gal.y, gal.z
+
             self.lnlike[i] = np.log( ( ejmodel.R(self.m[i], vx, vy, vz, x, y, z) * ejmodel.g( np.linspace(0, 1, nsteps[i]) ) ).sum() )
-            if(self.lnlike[i] == -np.inf):
+            if((self.lnlike[i] == -np.inf) and (not individual)):
                 break
+
         if(individual):
             return self.lnlike
         return self.lnlike.sum()
@@ -581,11 +592,11 @@ class HVSsample:
         if('dt' in data_table.meta):
             self.dt = data_table.meta['dt']*u.Myr
 
-
         if('cattype' not in data_table.meta):
             raise ValueError('Loaded fits table must contain the cattype metavariable!')
             return False
         self.cattype = data_table.meta['cattype']
+
         self.size = len(data_table)
 
         #DATA

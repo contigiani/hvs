@@ -13,6 +13,8 @@ rbf_2_G =  interpolate.Rbf(Id, A_v, GMag_0, function = 'linear')
 rbf_2_V =  interpolate.Rbf(Id, A_v, VMag_0, function = 'linear')
 rbf_2_Ic = interpolate.Rbf(Id, A_v, IcMag_0, function = 'linear')
 
+files, Id, T, logg, met, Vt, Xh = np.loadtxt(spectrum_data, dtype = 'str', unpack=True)
+
 def closest_spectrum(Teff,Logg):
     '''
         Finds the spectrum from the BaSel library which matches the given
@@ -22,7 +24,6 @@ def closest_spectrum(Teff,Logg):
     Vturb = 2.00 # Atmospheric micro-turbulence velocity [km/s]
     XH = 0.00 # Mixing length
 
-    files, Id, T, logg, met, Vt, Xh = np.loadtxt(spectrum_data, dtype = 'str', unpack=True)
     Id = np.array(Id,dtype='float')
     T = np.array(T,dtype='float')
     logg = np.array(logg,dtype='float')

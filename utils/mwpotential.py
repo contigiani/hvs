@@ -5,7 +5,7 @@ import numpy as np
 
 
 
-def MWPotential(Ms=0.76, rs=24.8, c=1.):
+def MWPotential(Ms=0.76, rs=24.8, c=1., T=True):
     '''
         Milky Way potential from Marchetti 2017b -- see galpy for the definitions of the potential components
 
@@ -17,6 +17,8 @@ def MWPotential(Ms=0.76, rs=24.8, c=1.):
                 Radial profile in units of kpc
             c : float
                 Axis ratio
+            T : bool
+                If True, use triaxialNFWPotential 
     '''
 
     # NFW profile
@@ -34,8 +36,10 @@ def MWPotential(Ms=0.76, rs=24.8, c=1.):
 
     #BH mass in 1e6 Msun
     Mbh = 4e6*u.Msun
-
-    halop = TriaxialNFWPotential(amp=Ms, a=rs, c=c, normalize=False)
+    if(T):
+        halop = TriaxialNFWPotential(amp=Ms, a=rs, c=c, normalize=False)
+    else:
+        halop = NFWPotential(amp=Ms, a=rs, normalize=False)
     diskp = MiyamotoNagaiPotential(amp=Md, a=ad, b=bd)
     bulgep = HernquistPotential(amp=2*Mb, a=Rb) #Factor 2 because of the galpy definition
     bh = KeplerPotential(amp=Mbh)
