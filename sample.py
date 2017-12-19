@@ -14,7 +14,7 @@ class HVSsample:
         - Save/Load resulting catalog as FITS file (astropy.table)
 
         See README for usage examples.
-
+        
         Attributes
         ---------
             self.size : int
@@ -34,7 +34,7 @@ class HVSsample:
                 Initial phase space coordinates at ejection in cylindrical coordinates
             self.ra, self.dec, self.dist, self.pmra, self.pmdec, self.vlos : Quantity
                 Equatorial coordinates of the stars. Right ascension and declination (ra, dec), heliocentric
-                distance (dist), proper motion in ra and dec directions (pmra must be declination-corrected),
+                distance (dist), proper motion in ra and dec directions (pmra is declination-corrected),
                 line of sight velocity (vlos)
             self.e_ra, self.e_dec, self.e_par, self.e_pmra, self.e_pmdec, self.e_vlos : Quantity
                 Errors on the coordinates, photometry() computes e_par and e_vlos (parallax and vlos)
@@ -59,11 +59,11 @@ class HVSsample:
             propagate():
                 Propagates the sample in the Galaxy, changes cattype from 0 to 1
             photometry():
-                Performs the Gaia selection cut, changes cattype from 1 to 2
+                Calculates the Gaia photometric properties, changes cattype from 1 to 2
             likelihood():
                 Checks the likelihood of the sample for a given potential&ejection model combination
-            scramble():
-                Scrambles the Galactocentric longitude of the sample to simulate N Gaia realizations
+            shuffle():
+                Randomizes the Galactocentric longitude of the sample to simulate N Gaia realizations
 
             save():
                 Saves the sample in a FITS file
@@ -395,7 +395,7 @@ class HVSsample:
             vtotcut : Quantity
                 Total galactocentric velocity cut to satisfy if cut=='Gaia'
             GRVScut : float
-                Cut in magnitude to satisfy if cut=='Gaia'
+                Cut in GRVS apparent magnitude to satisfy if cut=='Gaia'
         '''
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
