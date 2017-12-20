@@ -79,6 +79,8 @@ def get_errors(r, l, b, M, age, dust):
     '''
     r, l, b, M, age = r*u.kpc, l*u.deg, b*u.deg, M*u.Msun, age*u.Myr
 
+    beta = np.arcsin(abs(0.4971*np.sin(b) + 0.8677*np.cos(b)*np.sin(l - 6.38 * u.deg)))
+
     T, R = hse.get_TempRad( M.to(u.solMass).value, 0, age.to(u.Myr).value) # Temperature [K], radius [solRad]
 
     T = T * u.K                   # Temperature of the star at t = tage [K]
@@ -112,11 +114,11 @@ def get_errors(r, l, b, M, age, dust):
     from pygaia.errors.astrometric import properMotionError
     from pygaia.errors.astrometric import parallaxError
 
-    e_par = parallaxError(GMag, V_I, beta) * u.uas # Parallax error (PyGaia) [uas]
-    e_pmra, e_pmdec = properMotionError(GMag, V_I, beta) * u.uas / u.yr # ICRS proper motions error (PyGaia) [uas/yr]
+    e_par = parallaxError(GMag, V_I, beta) # Parallax error (PyGaia) [uas]
+    e_pmra, e_pmdec = properMotionError(GMag, V_I, beta) # ICRS proper motions error (PyGaia) [uas/yr]
 
     GRVS = G_to_GRVS( GMag, V_I )
 
-    return GRVS, V, G, e_par, e_pmra, e_pmdec
+    return GRVS, VMag, GMag, e_par, e_pmra, e_pmdec
 
 get_GRVS = np.vectorize(get_errors)

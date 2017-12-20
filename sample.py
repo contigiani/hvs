@@ -232,8 +232,9 @@ class HVSsample:
 
             self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.e_pmdec = get_GRVS(self.dist.to('kpc').value, l, b, self.m.to('Msun').value, self.tage.to('Myr').value, dustmap)
 
-
-
+        self.e_par = self.e_par * u.uas
+        self.e_pmra = self.e_pmra * u.uas / u.yr
+        self.e_pmdec = self.e_pmdec * u.uas /u.yr
         if(v):
             import astropy.coordinates as coord
             from galpy.util.bovy_coords import radec_to_lb, pmrapmdec_to_pmllpmbb
