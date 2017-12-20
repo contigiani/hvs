@@ -14,7 +14,7 @@ class HVSsample:
         - Save/Load resulting catalog as FITS file (astropy.table)
 
         See README for usage examples.
-        
+
         Attributes
         ---------
             self.size : int
@@ -343,7 +343,6 @@ class HVSsample:
 
         vr, vtheta : numpy.array or float
             velocity in the radial direction (parallel to the position vector) and in the theta (perpendicular to it)
-
         '''
         from galpy.orbit import Orbit
 
@@ -546,13 +545,13 @@ class HVSsample:
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
                         self.dist, self.vlos]
             namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', \
-                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'vtot']
+                        'dec', 'pmra', 'pmdec', 'dist', 'vlos']
 
         if(self.cattype == 2):
             # Gaia catalog
             datalist = [self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0, \
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
-                        self.dist, self.vlos, self.GRVS, self.vtot]
+                        self.dist, self.vlos, self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.e_pmdec, self.vtot]
             namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', \
                         'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
 

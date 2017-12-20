@@ -24,6 +24,9 @@ def closest_spectrum(Teff,Logg):
     Vturb = 2.00 # Atmospheric micro-turbulence velocity [km/s]
     XH = 0.00 # Mixing length
 
+    spectrum_data = os.path.join(os.path.dirname(__file__), 'spectrum_data.txt')
+    files, Id, T, logg, met, Vt, Xh = np.loadtxt(spectrum_data, dtype = 'str', unpack=True)
+
     Id = np.array(Id,dtype='float')
     T = np.array(T,dtype='float')
     logg = np.array(logg,dtype='float')
