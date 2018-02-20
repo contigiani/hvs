@@ -18,7 +18,7 @@ def MWPotential(Ms=0.76, rs=24.8, c=1., T=True):
             c : float
                 Axis ratio
             T : bool
-                If True, use triaxialNFWPotential 
+                If True, use triaxialNFWPotential
     '''
 
     # NFW profile
@@ -40,8 +40,8 @@ def MWPotential(Ms=0.76, rs=24.8, c=1., T=True):
         halop = TriaxialNFWPotential(amp=Ms, a=rs, c=c, normalize=False)
     else:
         halop = NFWPotential(amp=Ms, a=rs, normalize=False)
-    diskp = MiyamotoNagaiPotential(amp=Md, a=ad, b=bd)
-    bulgep = HernquistPotential(amp=2*Mb, a=Rb) #Factor 2 because of the galpy definition
-    bh = KeplerPotential(amp=Mbh)
+    diskp = MiyamotoNagaiPotential(amp=Md, a=ad, b=bd, normalize=False)
+    bulgep = HernquistPotential(amp=2*Mb, a=Rb, normalize=False) #Factor 2 because of the galpy definition
+    bh = KeplerPotential(amp=Mbh, normalize=False)
 
     return [halop, diskp, bulgep, bh]
