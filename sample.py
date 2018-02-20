@@ -114,6 +114,59 @@ class HVSsample:
             self.m, self.tage, self.tflight, self.size = ejmodel.sampler(**kwargs)
 
 
+    def compute_AA(self, potential, dt=0.01*u.Myr, AAi=None, method='S'):
+        '''
+            Compute action angle coordinates for a propagated orbit.
+        '''
+        from galpy.orbit import Orbit
+
+        if(AAi is None):
+            AAi = range(self.size)
+
+        AAi = np.atleast_1d(AAi)
+        # Integration time step
+        self.dt = dt
+        nsteps = np.ceil((self.tflight/self.dt).to('1').value)
+        nsteps[nsteps<100] = 100
+
+        # Initialize position in cylindrical coords
+        rho = self.r0 * np.sin(self.theta0)
+        z = self.r0 * np.cos(self.theta0)
+        phi = self.phi0
+
+        #... and velocity
+        vR = self.v0 * np.sin(self.thetav0) * np.cos(self.phiv0)
+        vT = self.v0 * np.sin(self.thetav0) * np.sin(self.phiv0)
+        vz = self.v0 * np.cos(self.thetav0)
+
+        # Initialize empty arrays to save orbit data and integration steps
+        self.orbits = [None] * self.size
+        AA = [np.zeros((3, int(nsteps[i]))) for i in AAi]
+        if(method!='S'):
+            from galpy.actionAngle import actionAngleAdiabatic
+            aAA = actionAngleAdiabatic(pot=potential, c=True, ro=8., vo=220.)
+        else:
+            from galpy.actionAngle import estimateDeltaStaeckel, actionAngleStaeckel
+
+
+        k=0
+        for i in AAi:
+            ts = np.linspace(0, 1, nsteps[i])*self.tflight[i]
+
+            self.orbits[i] = Orbit(vxvv = [rho[i], vR[i], vT[i], z[i], vz[i], phi[i]], solarmotion=self.solarmotion)
+            self.orbits[i].integrate(ts, potential, method='dopr54_c')
+
+            if(method=='S'):
+                delta = estimateDeltaStaeckel(potential,self.orbits[i].R(ts)*u.kpc,self.orbits[i].z(ts)*u.kpc)
+                aAA = actionAngleStaeckel(pot=potential, c=True, ro=8., vo=220., delta=delta)
+
+            AA[k] = aAA(self.orbits[i].R(ts)*u.kpc, self.orbits[i].vR(ts)*u.km/u.s, self.orbits[i].vT(ts)*u.km/u.s, self.orbits[i].z(ts)*u.kpc, self.orbits[i].vz(ts)*u.km/u.s)
+            #AA[k] = aAA(self.orbits[i].R(ts)/8, self.orbits[i].vR(ts)/220, self.orbits[i].vT(ts)/220, self.orbits[i].z(ts)/8, self.orbits[i].vz(ts)/220)
+            k+=1
+
+        return AA
+
+
     def propagate(self, potential, dt=0.01*u.Myr, threshold=None):
         '''
             Propagates the sample in the Galaxy, changes cattype from 0 to 1.
@@ -163,8 +216,18 @@ class HVSsample:
                                                                             (np.zeros(self.size) for i in xrange(7))
         self.orbits = [None] * self.size
 
+        if(AAindex is None):
+            indices = xrange(self.size)
+        else:
+            from galpy.actionAngle import actionAngleAdiabatic
+
+            indices = AAindex
+            AA = [numpy.zeros((3, nsteps)) for i in indices]
+            k = 0
+            aAA = actionAngleAdiabatic(pot=potential, c=True)
+
         #Integration loop for the self.size orbits
-        for i in xrange(self.size):
+        for i in indices:
             ts = np.linspace(0, 1, nsteps[i])*self.tflight[i]
 
             self.orbits[i] = Orbit(vxvv = [rho[i], vR[i], vT[i], z[i], vz[i], phi[i]], solarmotion=self.solarmotion)
@@ -185,6 +248,7 @@ class HVSsample:
                 idx_energy = np.absolute(energy_array/energy_array[0] - 1) >  threshold
                 self.energy_var[i] = float(idx_energy.sum())/nsteps[i] # percentage of outliars
 
+
         # Radial velocity and distance + distance modulus
         self.vlos, self.dist = self.vlos * u.km/u.s, self.dist * u.kpc
 
@@ -202,7 +266,6 @@ class HVSsample:
             from astropy.table import Table
             e_data = Table([self.m, self.tflight, self.energy_var], names=['m', 'tflight', 'pol'])
             e_data.write('E_data.fits', overwrite=True)
-
 
     def photometry(self, dustmap=None, v=True):
         '''
@@ -516,6 +579,111 @@ class HVSsample:
         if(individual):
             return self.lnlike
         return self.lnlike.sum()
+
+
+
+
+
+
+
+
+    def likelihood_orbit(self, potential, ejmodel, index, dt=0.005*u.Myr, xi = 0, individual=False, weights=None):
+        '''
+        Computes the non-normalized ln-likelihood of a given potential and ejection model for a given potential.
+        When comparing different ejection models or biased samples, make sure you renormalize the likelihood
+        accordingly. See Contigiani+ 2018.
+
+        Can return the ln-likelihoods of individual stars if individual is set to True.
+
+        Parameters
+        ----------
+        potential : galpy potential
+            Potential to be tested and to integrate the orbits with.
+        ejmodel : EjectionModel
+            Ejectionmodel to be tested.
+        individual : bool
+            If True the method returns individual likelihoods. The default value is False.
+        weights : iterable
+            List or array containing the weights for the ln-likelihoods of the different stars.
+        xi : float or array
+            Assumed metallicity for stellar lifetime
+
+        Returns
+        -------
+
+        log likelihood values : numpy.array or float
+            Returns the ln-likelihood of the entire sample or the log-likelihood for every single star if individual
+            is True.
+
+        '''
+        from galpy.orbit import Orbit
+        import astropy.coordinates as coord
+        from hvs.utils import t_MS
+
+        if(self.cattype == 0):
+            raise ValueError("The likelihood can be computed only for a propagated sample.")
+
+        if(self.size > 1e3):
+            print("You are computing the likelihood of a large sample. This might take a while.")
+
+        weights = np.array(weights)
+        if((weights != None) and (weights.size != self.size)):
+            raise ValueError('The length of weights must be equal to the number of HVS in the sample.')
+
+        self.backwards_orbits = [None] * self.size
+        self.back_dt = dt
+        self.lnlike = np.ones(self.size) * (-np.inf)
+
+        lifetime = t_MS(self.m, xi)
+        lifetime[lifetime>self.T_MW] = self.T_MW
+        nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
+        nsteps[nsteps<100] = 100
+
+
+        vSun = [-self.solarmotion[0], self.solarmotion[1], self.solarmotion[2]] * u.km / u.s # (U, V, W)
+        vrot = [0., 220., 0.] * u.km / u.s
+
+        RSun = 8. * u.kpc
+        zSun = 0.025 * u.kpc
+
+        v_sun = coord.CartesianDifferential(vrot+vSun)
+        gc = coord.Galactocentric(galcen_distance=RSun, z_sun=zSun, galcen_v_sun=v_sun)
+
+        for i in [index]:
+            ts = np.linspace(0, 1, nsteps[i])*lifetime[i]
+            self.backwards_orbits[i] = Orbit(vxvv = [self.ra[i], self.dec[i], self.dist[i], \
+                                    self.pmra[i], self.pmdec[i], self.vlos[i]], \
+                                    solarmotion=self.solarmotion, radec=True).flip()
+            self.backwards_orbits[i].integrate(ts, potential, method='dopr54_c')
+
+            dist, ll, bb, pmll, pmbb, vlos = self.backwards_orbits[i].dist(ts, use_physical=True) * u.kpc, \
+                                                self.backwards_orbits[i].ll(ts, use_physical=True) * u.deg, \
+                                                self.backwards_orbits[i].bb(ts, use_physical=True) * u.deg, \
+                                                self.backwards_orbits[i].pmll(ts, use_physical=True) *u.mas/u.year, \
+                                                self.backwards_orbits[i].pmbb(ts, use_physical=True) * u.mas/u.year, \
+                                                self.backwards_orbits[i].vlos(ts, use_physical=True) * u.km/u.s
+
+            galactic = coord.Galactic(l=ll, b=bb, distance=dist, pm_l_cosb=pmll, pm_b=pmbb, radial_velocity=vlos)
+            gal = galactic.transform_to(gc)
+            vx, vy, vz = gal.v_x, gal.v_y, gal.v_z
+            x, y, z = gal.x, gal.y, gal.z
+
+
+            self.lnlike[i] = np.log( ( ejmodel.R(self.m[i], vx, vy, vz, x, y, z) * ejmodel.g( np.linspace(0, 1, nsteps[i]) ) ).sum() )
+
+            return self.lnlike[i], x,y, z, vx, vy, vz
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     def save(self, path):
