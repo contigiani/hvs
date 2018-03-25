@@ -143,8 +143,8 @@ class HVSsample:
         self.orbits = [None] * self.size
         AA = [np.zeros((3, int(nsteps[i]))) for i in AAi]
         if(method!='S'):
-            from galpy.actionAngle import actionAngleAdiabatic
-            aAA = actionAngleAdiabatic(pot=potential, c=True, ro=8., vo=220.)
+            from galpy.actionAngle import actionAngleIsochroneApprox, actionAngleAdiabatic
+            aAA = actionAngleIsochroneApprox(pot=potential, c=True, ro=8., vo=220.)
         else:
             from galpy.actionAngle import estimateDeltaStaeckel, actionAngleStaeckel
 
@@ -580,40 +580,23 @@ class HVSsample:
             return self.lnlike
         return self.lnlike.sum()
 
-
-
-
-
-
-
-
     def likelihood_orbit(self, potential, ejmodel, index, dt=0.005*u.Myr, xi = 0, individual=False, weights=None):
         '''
-        Computes the non-normalized ln-likelihood of a given potential and ejection model for a given potential.
-        When comparing different ejection models or biased samples, make sure you renormalize the likelihood
-        accordingly. See Contigiani+ 2018.
-
-        Can return the ln-likelihoods of individual stars if individual is set to True.
+        Same as likelihood, but returns the lnLikelihood for a single orbit, together with the entire orbit.
 
         Parameters
         ----------
-        potential : galpy potential
-            Potential to be tested and to integrate the orbits with.
-        ejmodel : EjectionModel
-            Ejectionmodel to be tested.
-        individual : bool
-            If True the method returns individual likelihoods. The default value is False.
-        weights : iterable
-            List or array containing the weights for the ln-likelihoods of the different stars.
-        xi : float or array
-            Assumed metallicity for stellar lifetime
+            index : int
+                Index of the star to propagate
 
+            See self.likelihood() for other parameters
         Returns
         -------
-
         log likelihood values : numpy.array or float
             Returns the ln-likelihood of the entire sample or the log-likelihood for every single star if individual
             is True.
+        x, y, z, vx, vy, vz : Quantity
+            Position and velocity in Galactocentric coordinates.
 
         '''
         from galpy.orbit import Orbit
