@@ -62,8 +62,6 @@ class HVSsample:
                 Calculates the Gaia photometric properties, changes cattype from 1 to 2
             likelihood():
                 Checks the likelihood of the sample for a given potential&ejection model combination
-            shuffle():
-                Randomizes the Galactocentric longitude of the sample to simulate N Gaia realizations
 
             save():
                 Saves the sample in a FITS file
@@ -101,7 +99,6 @@ class HVSsample:
         if isinstance(inputdata, basestring):
             self._load(inputdata)
 
-
     def _eject(self, ejmodel, **kwargs):
         '''
             Initializes the sample as an ejection sample
@@ -112,7 +109,6 @@ class HVSsample:
 
         self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0, \
             self.m, self.tage, self.tflight, self.size = ejmodel.sampler(**kwargs)
-
 
     def compute_AA(self, potential, dt=0.01*u.Myr, AAi=None, method='S'):
         '''
@@ -166,7 +162,6 @@ class HVSsample:
 
         return AA
 
-
     def propagate(self, potential, dt=0.01*u.Myr, threshold=None):
         '''
             Propagates the sample in the Galaxy, changes cattype from 0 to 1.
@@ -216,18 +211,8 @@ class HVSsample:
                                                                             (np.zeros(self.size) for i in xrange(7))
         self.orbits = [None] * self.size
 
-        if(AAindex is None):
-            indices = xrange(self.size)
-        else:
-            from galpy.actionAngle import actionAngleAdiabatic
-
-            indices = AAindex
-            AA = [numpy.zeros((3, nsteps)) for i in indices]
-            k = 0
-            aAA = actionAngleAdiabatic(pot=potential, c=True)
-
         #Integration loop for the self.size orbits
-        for i in indices:
+        for i in xrange(self.size):
             ts = np.linspace(0, 1, nsteps[i])*self.tflight[i]
 
             self.orbits[i] = Orbit(vxvv = [rho[i], vR[i], vT[i], z[i], vz[i], phi[i]], solarmotion=self.solarmotion)
@@ -266,6 +251,85 @@ class HVSsample:
             from astropy.table import Table
             e_data = Table([self.m, self.tflight, self.energy_var], names=['m', 'tflight', 'pol'])
             e_data.write('E_data.fits', overwrite=True)
+
+    def propagate_initial(self, potential, dt=0.01*u.Myr, index, size, deltav=5.*u.km/u.s, deltat=0.5*u.Myr):
+        '''
+            Propagates the index-th star and _size_ more stars with random spread in
+            initial velocity and flight time dictated by deltav, deltat.
+
+            This overwrites the original catalogue!
+
+            Parameters
+            ----------
+                index : int
+                    Index of the star to propagate this in.
+                size : int
+
+                dv, dt : Quantity
+                    Spread in initial velocity and
+                See self.propagate() for the other parameters.
+
+        '''
+        from galpy.orbit import Orbit
+        from galpy.util.bovy_coords import pmllpmbb_to_pmrapmdec, lb_to_radec, vrpmllpmbb_to_vxvyvz, lbd_to_XYZ
+
+        self.r0, self.theta0, self.phi0, self.v0, self.tflight, self.tage, self.m = np.ones(size)*self.r0[index], np.ones(size)*self.theta0[index], \
+                                        np.ones(size)*self.phi0[index], np.ones(size)*self.v0[index], \
+                                        np.ones(size)*self.tflight[index], np.ones(size)*self.tage[index], np.ones(size)*self.m[index]
+
+        self.v0 = self.v0 + np.random.normal(size=size)*deltav
+        self.tflight = self.tflight + np.random.normal(size=size)*deltat
+        self.size = size
+
+
+        # Integration time step
+        self.dt = dt
+        nsteps = np.ceil((self.tflight/self.dt).to('1').value)
+        nsteps[nsteps<100] = 100
+
+        # Initialize position in cylindrical coords
+        rho = self.r0 * np.sin(self.theta0)
+        z = self.r0 * np.cos(self.theta0)
+        phi = self.phi0
+
+        #... and velocity
+        vR = self.v0 * np.sin(self.thetav0) * np.cos(self.phiv0)
+        vT = self.v0 * np.sin(self.thetav0) * np.sin(self.phiv0)
+        vz = self.v0 * np.cos(self.thetav0)
+
+        # Initialize empty arrays to save orbit data and integration steps
+        self.pmll, self.pmbb, self.ll, self.bb, self.vlos, self.dist, self.energy_var = \
+                                                                            (np.zeros(self.size) for i in xrange(7))
+        self.orbits = [None] * self.size
+
+        #Integration loop for the self.size orbits
+        for i in xrange(self.size):
+            ts = np.linspace(0, 1, nsteps[i])*self.tflight[i]
+
+            self.orbits[i] = Orbit(vxvv = [rho[i], vR[i], vT[i], z[i], vz[i], phi[i]], solarmotion=self.solarmotion)
+            self.orbits[i].integrate(ts, potential, method='dopr54_c')
+
+            # Export the final position
+            self.dist[i], self.ll[i], self.bb[i], self.pmll[i], self.pmbb[i], self.vlos[i] = \
+                                                self.orbits[i].dist(self.tflight[i], use_physical=True), \
+                                                self.orbits[i].ll(self.tflight[i], use_physical=True), \
+                                                self.orbits[i].bb(self.tflight[i], use_physical=True), \
+                                                self.orbits[i].pmll(self.tflight[i], use_physical=True) , \
+                                                self.orbits[i].pmbb(self.tflight[i], use_physical=True)  , \
+                                                self.orbits[i].vlos(self.tflight[i], use_physical=True)
+
+
+        # Radial velocity and distance + distance modulus
+        self.vlos, self.dist = self.vlos * u.km/u.s, self.dist * u.kpc
+
+        # Sky coordinates and proper motion
+        data = pmllpmbb_to_pmrapmdec(self.pmll, self.pmbb, self.ll, self.bb, degree=True)*u.mas / u.year
+        self.pmra, self.pmdec = data[:, 0], data[:, 1]
+        data = lb_to_radec(self.ll, self.bb, degree=True)* u.deg
+        self.ra, self.dec = data[:, 0], data[:, 1]
+
+        # Done propagating
+        self.cattype = 1
 
     def photometry(self, dustmap=None, v=True):
         '''
@@ -320,7 +384,6 @@ class HVSsample:
             self.vtot = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
 
         self.cattype = 2
-
 
     def shuffle(self, GRVScut=16., vtotcut=450*u.km/u.s, dustmap=None, N=100):
         '''
@@ -387,12 +450,10 @@ class HVSsample:
 
         return NGaia
 
-
     def precision_check(self, potential, dt=0.01*u.Myr, xi=0):
         '''
         Computes the tangetial momentum of the stars at ejection after backwards integration. This is a numerical check
         on the precision of the angular momentum. See Contigiani+ 2018.
-
 
         Parameters
         ----------
@@ -401,10 +462,8 @@ class HVSsample:
         xi : float or array
             Assumed metallicity for stellar lifetime.
 
-
         Returns
         -------
-
         vr, vtheta : numpy.array or float
             velocity in the radial direction (parallel to the position vector) and in the theta (perpendicular to it)
         '''
@@ -444,10 +503,9 @@ class HVSsample:
         # returns the velocity in the spherically radial direction and polar direction
         return np.abs(vR*z -vz*R), np.abs(vR*R +vz*z)
 
-
     def subsample(self, cut=None, vtotcut=450*u.km/u.s, GRVScut=16.):
         '''
-        Restrict the sample based on the value of cut.
+        Restrict the sample based on the values of cut.
 
         Parameters
         ----------
@@ -489,7 +547,6 @@ class HVSsample:
                     except:
                         pass
                 self.size = cut.size
-
 
     def likelihood(self, potential, ejmodel, dt=0.005*u.Myr, xi = 0, individual=False, weights=None):
         '''
@@ -656,19 +713,6 @@ class HVSsample:
 
             return self.lnlike[i], x,y, z, vx, vy, vz
 
-
-
-
-
-
-
-
-
-
-
-
-
-
     def save(self, path):
         '''
             Saves the sample in a FITS file.
@@ -709,7 +753,6 @@ class HVSsample:
 
         data_table = Table(data=datalist, names=namelist, meta=meta_var)
         data_table.write(path, overwrite=True)
-
 
     def _load(self, path):
         '''
