@@ -252,7 +252,7 @@ class HVSsample:
             e_data = Table([self.m, self.tflight, self.energy_var], names=['m', 'tflight', 'pol'])
             e_data.write('E_data.fits', overwrite=True)
 
-    def propagate_initial(self, potential, dt=0.01*u.Myr, index, size, deltav=5.*u.km/u.s, deltat=0.5*u.Myr):
+    def propagate_initial(self, potential, index, dt=0.01*u.Myr, size=100, deltav=5.*u.km/u.s, deltat=0.5*u.Myr):
         '''
             Propagates the index-th star and _size_ more stars with random spread in
             initial velocity and flight time dictated by deltav, deltat.
@@ -273,8 +273,8 @@ class HVSsample:
         from galpy.orbit import Orbit
         from galpy.util.bovy_coords import pmllpmbb_to_pmrapmdec, lb_to_radec, vrpmllpmbb_to_vxvyvz, lbd_to_XYZ
 
-        self.r0, self.theta0, self.phi0, self.v0, self.tflight, self.tage, self.m = np.ones(size)*self.r0[index], np.ones(size)*self.theta0[index], \
-                                        np.ones(size)*self.phi0[index], np.ones(size)*self.v0[index], \
+        self.r0, self.theta0, self.phi0, self.v0, self.phiv0, self.thetav0, self.tflight, self.tage, self.m = np.ones(size)*self.r0[index], np.ones(size)*self.theta0[index], \
+                                        np.ones(size)*self.phi0[index], np.ones(size)*self.v0[index], np.ones(size)*self.phiv0[index], np.ones(size)*self.thetav0[index], \
                                         np.ones(size)*self.tflight[index], np.ones(size)*self.tage[index], np.ones(size)*self.m[index]
 
         self.v0 = self.v0 + np.random.normal(size=size)*deltav
@@ -381,7 +381,8 @@ class HVSsample:
             galactic_coords = coord.Galactic(l=ll*u.deg, b=bb*u.deg, distance=self.dist, pm_l_cosb=pmll*u.mas/u.yr, pm_b=pmbb*u.mas/u.yr, radial_velocity=self.vlos)
             galactocentric_coords = galactic_coords.transform_to(GCCS)
 
-            self.vtot = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
+            self.GCv = np.sqrt(galactocentric_coords.v_x**2. + galactocentric_coords.v_y**2. + galactocentric_coords.v_z**2.).to(u.km/u.s)
+            self.GCdist = np.sqrt(galactocentric_coords.x**2. + galactocentric_coords.y**2. + galactocentric_coords.z**2.).to(u.kpc)
 
         self.cattype = 2
 
@@ -548,7 +549,7 @@ class HVSsample:
                         pass
                 self.size = cut.size
 
-    def likelihood(self, potential, ejmodel, dt=0.005*u.Myr, xi = 0, individual=False, weights=None):
+    def likelihood(self, potential, ejmodel, dt=0.005*u.Myr, xi = 0, individual=False, weights=None, tint_max=None):
         '''
         Computes the non-normalized ln-likelihood of a given potential and ejection model for a given potential.
         When comparing different ejection models or biased samples, make sure you renormalize the likelihood
@@ -568,6 +569,8 @@ class HVSsample:
             List or array containing the weights for the ln-likelihoods of the different stars.
         xi : float or array
             Assumed metallicity for stellar lifetime
+        tint_max : Quantity
+            Integrate back all stars only for a time tint_max.
 
         Returns
         -------
@@ -595,8 +598,11 @@ class HVSsample:
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
 
-        lifetime = t_MS(self.m, xi)
-        lifetime[lifetime>self.T_MW] = self.T_MW
+        if(tint_max is None):
+            lifetime = t_MS(self.m, xi)
+            lifetime[lifetime>self.T_MW] = self.T_MW
+        else:
+            lifetime = tint_max*np.ones(self.size)
         nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
         nsteps[nsteps<100] = 100
 
@@ -637,7 +643,7 @@ class HVSsample:
             return self.lnlike
         return self.lnlike.sum()
 
-    def likelihood_orbit(self, potential, ejmodel, index, dt=0.005*u.Myr, xi = 0, individual=False, weights=None):
+    def likelihood_orbit(self, potential, ejmodel, index, dt=0.005*u.Myr, xi = 0, individual=False, weights=None, tint_max=None):
         '''
         Same as likelihood, but returns the lnLikelihood for a single orbit, together with the entire orbit.
 
@@ -674,8 +680,11 @@ class HVSsample:
         self.back_dt = dt
         self.lnlike = np.ones(self.size) * (-np.inf)
 
-        lifetime = t_MS(self.m, xi)
-        lifetime[lifetime>self.T_MW] = self.T_MW
+        if(tint_max is None):
+            lifetime = t_MS(self.m, xi)
+            lifetime[lifetime>self.T_MW] = self.T_MW
+        else:
+            lifetime = np.ones(self.size)*tint_max
         nsteps = np.ceil((lifetime/self.back_dt).to('1').value)
         nsteps[nsteps<100] = 100
 
@@ -747,9 +756,9 @@ class HVSsample:
             # Gaia catalog
             datalist = [self.r0, self.phi0, self.theta0, self.v0, self.phiv0, self.thetav0, \
                         self.m, self.tage, self.tflight, self.ra, self.dec, self.pmra, self.pmdec, \
-                        self.dist, self.vlos, self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.e_pmdec, self.vtot]
+                        self.dist, self.vlos, self.GRVS, self.V, self.G, self.e_par, self.e_pmra, self.e_pmdec, self.GCdist, self.GCv]
             namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', \
-                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
+                        'dec', 'pmra', 'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'GCdist', 'GCv']
 
         data_table = Table(data=datalist, names=namelist, meta=meta_var)
         data_table.write(path, overwrite=True)
@@ -761,7 +770,7 @@ class HVSsample:
         from astropy.table import Table
 
         namelist = ['r0', 'phi0', 'theta0', 'v0', 'phiv0', 'thetav0', 'm', 'tage', 'tflight', 'ra', 'dec', 'pmra',
-                    'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'vtot']
+                    'pmdec', 'dist', 'vlos', 'GRVS', 'V', 'G', 'e_par', 'e_pmra', 'e_pmdec', 'GCdist', 'GCv']
 
 
         data_table = Table.read(path)

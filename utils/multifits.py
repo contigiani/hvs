@@ -29,7 +29,8 @@ def split_fits(mycat, mydir, n):
 
 def concatenate_fits(mycat, mydir):
     '''
-        Concatenates all fits tables ending in .fits located in mydir in a single catalog located in mycat.
+        Concatenates all fits tables ending in .fits located in mydir in a
+        single catalog located in mycat.fits
 
         Parameters
         ----------

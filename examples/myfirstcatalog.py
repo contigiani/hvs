@@ -27,8 +27,6 @@ mysample.save('myfirstcatalog.fits')
     Propagate it through the Galaxy
 '''
 
-print('Propagating...')
-
 # Take the default MW galactic potential
 
 from hvs.utils.mwpotential import MWPotential

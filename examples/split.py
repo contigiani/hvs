@@ -4,7 +4,7 @@ from hvs import HVSsample
 import shutil
 import os
 
-# Split the catalog
+# Split the catalog in mutiple fits
 split_fits("myfirstcatalog.fits", "myfirstdir", 10) # Loads myfirstcatalog.fits
 
 default_potential = MWPotential()
