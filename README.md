@@ -5,7 +5,7 @@ Generate mock catalogs of hypervelocity stars in the Milky Way.
 
 ## Setup
 
-Despite the fact that is a python module, the `setup.py` file does not exists (yet). To use the module, make sure that 
+Despite the fact that this is a python module, the `setup.py` file does not exists. To use it, just make sure that
 `hvs/` is in a directory included in your **PYTHONPATH** environment variable.
 
 ## Documentation
@@ -16,35 +16,37 @@ You can access every method's docstring by using the help() function in python.
 
 1. Define an ejection method/mechanism as a subclass of EjectionModel
 
-2. Create an instantaneous ejection sample. Because the ejection rate (# HVS per unit time) is assumed constant, 
-the expected flight time and age at observation can also be sampled at this time. 
+2. Create an instantaneous ejection sample. Because the ejection rate (# HVS per unit time) is assumed constant,
+the expected flight time and age at observation can also be sampled at this time.
 
-3. Propagate the sample in the Galaxy using the propagate() method. 
+3. Propagate the sample in the Galaxy using the propagate() method.
 
+4. Compute the GRVS photometry using the photometry() method
 
+5. Have fun with the HVS sample!
 
 ### Ejection models
 The classes `Rossi2017` and `Contigiani2018` inside `ejection.py` are two examples of pre-modelled ejection methods.
-    
-The class `EjectionModel` is the basic structure every ejection model class should be based on. Custom ejection models 
-should follow the same structure.
+
+The class `EjectionModel` is the basic structure every ejection model class should be based on. Custom ejection models
+should be subclasses and follow the same structure.
 
 ### Examples and more
 See the `examples/` directory for some basic scripts.
-    
+
 - `myfirstcatalog.py` shows the basic workings of the class HVSsample() and Rossi2017()
 
 - `split.py` shows how the orbit propagation and be parallelized over multiple machines or processes.
 
-- `RossiContigianicomparison.py` is a comparison between the two sampling methods for these ejection mechanisms. 
-    
-    
+- `RossiContigianicomparison.py` is a comparison between the two sampling methods for these ejection mechanisms.
+
+
 
 ## References
 
-* Contigiani+ (in prep.)
+* O. Contigiani, Rossi E. M., Marchetti T.  (in prep.)
 
-* Marchetti+ (in prep.)
+* Marchetti T., O. Contigiani, Rossi E. M., Albert J. G., Brown A. G. A., Sesana A., 2018, MNRAS ([arxiv](https://arxiv.org/abs/1711.11397))
 
 * Rossi E. M., Kobayashi S., Sari R., 2014, ApJ ([arxiv](https://arxiv.org/abs/1307.1134))
 
